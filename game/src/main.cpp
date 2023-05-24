@@ -19,9 +19,14 @@ int main(void)
 	Vector2 circlePosition = { 400, 300 };
 	float circleRadius = 50;
 	Color circleColor = RED;
+	Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
 
 	while (!WindowShouldClose())
 	{
+		UpdateMusicStream(music);
+		BeginDrawing();
+		ClearBackground(RAYWHITE);
+		DrawTexture(background, 0, 0, WHITE);
 		UpdateMusicStream(music);
 
 		BeginDrawing();
@@ -43,6 +48,7 @@ int main(void)
 	}
 
 	UnloadTexture(enterprise);
+	UnloadTexture(background);
 	UnloadSound(yay);
 	UnloadMusicStream(music);
 	CloseAudioDevice();
