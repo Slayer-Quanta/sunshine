@@ -16,6 +16,11 @@ int main(void)
 	PlaySound(yay);
 	PlayMusicStream(music);
 
+	Vector2 enterprisePosition = { static_cast<float>(SCREEN_WIDTH) / 2, static_cast<float>(SCREEN_HEIGHT) / 2 };
+	Vector2 enterpriseSpeed = { 2.5f, 1.5f };
+	Color enterpriseColor = WHITE;
+	float enterpriseRotation = 0.0f;
+
 	Vector2 circlePosition = { 400, 300 };
 	float circleRadius = 50;
 	Color circleColor = RED;
@@ -24,7 +29,6 @@ int main(void)
 	while (!WindowShouldClose())
 	{
 		UpdateMusicStream(music);
-		BeginDrawing();
 		ClearBackground(RAYWHITE);
 		DrawTexture(background, 0, 0, WHITE);
 		UpdateMusicStream(music);
@@ -32,6 +36,19 @@ int main(void)
 		BeginDrawing();
 
 		ClearBackground(RAYWHITE);
+
+		enterprisePosition.x += enterpriseSpeed.x;
+		enterprisePosition.y += enterpriseSpeed.y;
+
+		if (enterprisePosition.x + enterprise.width >= SCREEN_WIDTH || enterprisePosition.x <= 0)
+			enterpriseSpeed.x *= -1;
+		if (enterprisePosition.y + enterprise.width >= SCREEN_WIDTH || enterprisePosition.y <= 0)
+			enterpriseSpeed.y *= -1;
+		
+		enterpriseRotation += 1.0f;
+		DrawTexturePro(enterprise, { 0, 0, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
+			{ enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
+			{ static_cast<float>(enterprise.width) / 2, static_cast<float>(enterprise.height) / 2 }, enterpriseRotation, enterpriseColor);
 
 		DrawText("Hello World", 16, 9, 20, RED);
 		DrawTexture(enterprise, 0, 0, WHITE);
