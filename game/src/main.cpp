@@ -14,7 +14,6 @@ int main(void)
 	Texture2D enterprise = LoadTexture("../game/assets/textures/enterprise.png");
 	Music music = LoadMusicStream("../game/assets/audio/DANGERZONE.MP3");
 	Sound yay = LoadSound("../game/assets/audio/yay.ogg");
-	PlaySound(yay);
 	PlayMusicStream(music);
 
 	Vector2 enterprisePosition = { static_cast<float>(SCREEN_WIDTH) / 2, static_cast<float>(SCREEN_HEIGHT) / 2 };
@@ -27,14 +26,15 @@ int main(void)
 	Color circleColor = RED;
 	Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
 
+	bool collision = false; 
+	bool prevCollision = false; 
+
 	while (!WindowShouldClose())
 	{
 		UpdateMusicStream(music);
 		ClearBackground(RAYWHITE);
 		DrawTexture(background, 0, 0, WHITE);
-		UpdateMusicStream(music);
 
-		// Keyboard controls
 		if (IsKeyDown(KEY_W))
 			enterprisePosition.y -= 2.0f;
 		if (IsKeyDown(KEY_S))
@@ -45,9 +45,7 @@ int main(void)
 			enterprisePosition.x += 2.0f;
 
 		BeginDrawing();
-
 		ClearBackground(RAYWHITE);
-
 		enterprisePosition.x += enterpriseSpeed.x;
 		enterprisePosition.y += enterpriseSpeed.y;
 
@@ -67,26 +65,30 @@ int main(void)
 			{ enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
 			{ static_cast<float>(enterprise.width) / 2, static_cast<float>(enterprise.height) / 2 }, enterpriseRotation, enterpriseColor);
 
-		DrawText("Hello World", 16, 9, 20, RED);
-		DrawTexture(enterprise, 0, 0, WHITE);
-
 		DrawCircle(circlePosition.x, circlePosition.y, circleRadius, circleColor);
 		Vector2 mousePosition = GetMousePosition();
-		bool collision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
+		prevCollision = collision;
+		collision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
+
+		if (collision && !prevCollision)
+		{
+			PlaySound(yay); 
+		}
+
 		if (collision)
 			circleColor = BLUE;
 		else
 			circleColor = RED;
+
 		DrawCircle(mousePosition.x, mousePosition.y, circleRadius, circleColor);
 		EndDrawing();
 	}
-
 	UnloadTexture(enterprise);
 	UnloadTexture(background);
 	UnloadSound(yay);
 	UnloadMusicStream(music);
 	CloseAudioDevice();
-
 	CloseWindow();
+
 	return 0;
 }
