@@ -1,5 +1,6 @@
 #include "rlImGui.h"
 #include "raylib.h"
+#include "Math.h"
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -33,6 +34,16 @@ int main(void)
 		DrawTexture(background, 0, 0, WHITE);
 		UpdateMusicStream(music);
 
+		// Keyboard controls
+		if (IsKeyDown(KEY_W))
+			enterprisePosition.y -= 2.0f;
+		if (IsKeyDown(KEY_S))
+			enterprisePosition.y += 2.0f;
+		if (IsKeyDown(KEY_A))
+			enterprisePosition.x -= 2.0f;
+		if (IsKeyDown(KEY_D))
+			enterprisePosition.x += 2.0f;
+
 		BeginDrawing();
 
 		ClearBackground(RAYWHITE);
@@ -41,10 +52,16 @@ int main(void)
 		enterprisePosition.y += enterpriseSpeed.y;
 
 		if (enterprisePosition.x + enterprise.width >= SCREEN_WIDTH || enterprisePosition.x <= 0)
+		{
 			enterpriseSpeed.x *= -1;
-		if (enterprisePosition.y + enterprise.width >= SCREEN_WIDTH || enterprisePosition.y <= 0)
+			enterprisePosition.x = Clamp(enterprisePosition.x, 0, SCREEN_WIDTH - enterprise.width);
+		}
+		if (enterprisePosition.y + enterprise.width >= SCREEN_HEIGHT || enterprisePosition.y <= 0)
+		{
 			enterpriseSpeed.y *= -1;
-		
+			enterprisePosition.y = Clamp(enterprisePosition.y, 0, SCREEN_HEIGHT - enterprise.height);
+		}
+
 		enterpriseRotation += 1.0f;
 		DrawTexturePro(enterprise, { 0, 0, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
 			{ enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
@@ -69,6 +86,7 @@ int main(void)
 	UnloadSound(yay);
 	UnloadMusicStream(music);
 	CloseAudioDevice();
+
 	CloseWindow();
 	return 0;
 }
