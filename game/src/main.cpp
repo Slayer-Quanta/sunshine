@@ -7,88 +7,115 @@
 
 int main(void)
 {
-	InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE");
-	InitAudioDevice();
-	SetTargetFPS(60);
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE");
+    InitAudioDevice();
+    SetTargetFPS(60);
 
-	Texture2D enterprise = LoadTexture("../game/assets/textures/enterprise.png");
-	Music music = LoadMusicStream("../game/assets/audio/DANGERZONE.MP3");
-	Sound yay = LoadSound("../game/assets/audio/yay.ogg");
-	PlayMusicStream(music);
+    Texture2D enterprise = LoadTexture("../game/assets/textures/enterprise.png");
+    Music music = LoadMusicStream("../game/assets/audio/DANGERZONE.MP3");
+    Sound yay = LoadSound("../game/assets/audio/yay.ogg");
+    PlayMusicStream(music);
 
-	Vector2 enterprisePosition = { static_cast<float>(SCREEN_WIDTH) / 2, static_cast<float>(SCREEN_HEIGHT) / 2 };
-	Vector2 enterpriseSpeed = { 2.5f, 1.5f };
-	Color enterpriseColor = WHITE;
-	float enterpriseRotation = 0.0f;
+    Vector2 enterprisePosition = { static_cast<float>(SCREEN_WIDTH) / 2, static_cast<float>(SCREEN_HEIGHT) / 2 };
+    Vector2 enterpriseSpeed = { 5.5f, 4.5f };
+    Color enterpriseColor = WHITE;
+    float enterpriseRotation = 0.0f;
 
-	Vector2 circlePosition = { 400, 300 };
-	float circleRadius = 50;
-	Color circleColor = RED;
-	Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
+    Vector2 circlePosition = { 400, 300 };
+    float circleRadius = 50;
+    Color circleColor = RED;
 
-	bool collision = false; 
-	bool prevCollision = false; 
+    Vector2 shapePosition = { 600, 400 };
+    float shapeSize = 40;
+    Color shapeColor = GREEN;
+    Vector2 shapeVelocity = { 4.0f, 4.5f };
 
-	while (!WindowShouldClose())
-	{
-		UpdateMusicStream(music);
-		ClearBackground(RAYWHITE);
-		DrawTexture(background, 0, 0, WHITE);
+    Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
 
-		if (IsKeyDown(KEY_W))
-			enterprisePosition.y -= 2.0f;
-		if (IsKeyDown(KEY_S))
-			enterprisePosition.y += 2.0f;
-		if (IsKeyDown(KEY_A))
-			enterprisePosition.x -= 2.0f;
-		if (IsKeyDown(KEY_D))
-			enterprisePosition.x += 2.0f;
+    bool collision = false;
+    bool prevCollision = false;
 
-		BeginDrawing();
-		ClearBackground(RAYWHITE);
-		enterprisePosition.x += enterpriseSpeed.x;
-		enterprisePosition.y += enterpriseSpeed.y;
+    while (!WindowShouldClose())
+    {
+        UpdateMusicStream(music);
+        ClearBackground(RAYWHITE);
+        DrawTexture(background, 0, 0, WHITE);
 
-		if (enterprisePosition.x + enterprise.width >= SCREEN_WIDTH || enterprisePosition.x <= 0)
-		{
-			enterpriseSpeed.x *= -1;
-			enterprisePosition.x = Clamp(enterprisePosition.x, 0, SCREEN_WIDTH - enterprise.width);
-		}
-		if (enterprisePosition.y + enterprise.width >= SCREEN_HEIGHT || enterprisePosition.y <= 0)
-		{
-			enterpriseSpeed.y *= -1;
-			enterprisePosition.y = Clamp(enterprisePosition.y, 0, SCREEN_HEIGHT - enterprise.height);
-		}
+        if (IsKeyDown(KEY_W))
+            enterprisePosition.y -= 10.0f;
+        if (IsKeyDown(KEY_S))
+            enterprisePosition.y += 10.0f;
+        if (IsKeyDown(KEY_A))
+            enterprisePosition.x -= 7.0f;
+        if (IsKeyDown(KEY_D))
+            enterprisePosition.x += 7.0f;
 
-		enterpriseRotation += 1.0f;
-		DrawTexturePro(enterprise, { 0, 0, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
-			{ enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
-			{ static_cast<float>(enterprise.width) / 2, static_cast<float>(enterprise.height) / 2 }, enterpriseRotation, enterpriseColor);
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        enterprisePosition.x += enterpriseSpeed.x;
+        enterprisePosition.y += enterpriseSpeed.y;
 
-		DrawCircle(circlePosition.x, circlePosition.y, circleRadius, circleColor);
-		Vector2 mousePosition = GetMousePosition();
-		prevCollision = collision;
-		collision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
+        if (enterprisePosition.x + enterprise.width >= SCREEN_WIDTH || enterprisePosition.x <= 0)
+        {
+            enterpriseSpeed.x *= -1;
+            enterprisePosition.x = Clamp(enterprisePosition.x, 0, SCREEN_WIDTH - enterprise.width);
+        }
+        if (enterprisePosition.y + enterprise.width >= SCREEN_HEIGHT || enterprisePosition.y <= 0)
+        {
+            enterpriseSpeed.y *= -1;
+            enterprisePosition.y = Clamp(enterprisePosition.y, 0, SCREEN_HEIGHT - enterprise.height);
+        }
 
-		if (collision && !prevCollision)
-		{
-			PlaySound(yay); 
-		}
+        enterpriseRotation += 1.0f;
+        DrawTexturePro(enterprise, { 0, 0, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
+            { enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
+            { static_cast<float>(enterprise.width) / 2, static_cast<float>(enterprise.height) / 2 }, enterpriseRotation, enterpriseColor);
 
-		if (collision)
-			circleColor = BLUE;
-		else
-			circleColor = RED;
+        Vector2 mousePosition = GetMousePosition();
 
-		DrawCircle(mousePosition.x, mousePosition.y, circleRadius, circleColor);
-		EndDrawing();
-	}
-	UnloadTexture(enterprise);
-	UnloadTexture(background);
-	UnloadSound(yay);
-	UnloadMusicStream(music);
-	CloseAudioDevice();
-	CloseWindow();
+        DrawCircle(circlePosition.x, circlePosition.y, circleRadius, circleColor);
+        bool collision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
+        if (collision)
+            circleColor = BLUE;
+        else
+            circleColor = RED;
+        DrawCircle(mousePosition.x, mousePosition.y, circleRadius, circleColor);
 
-	return 0;
+        shapePosition.x += shapeVelocity.x;
+        shapePosition.y += shapeVelocity.y;
+
+        if (shapePosition.x + shapeSize >= SCREEN_WIDTH || shapePosition.x <= 0)
+        {
+            shapeVelocity.x *= -1;
+            shapePosition.x = Clamp(shapePosition.x, 0, SCREEN_WIDTH - shapeSize);
+        }
+        if (shapePosition.y + shapeSize >= SCREEN_HEIGHT || shapePosition.y <= 0)
+        {
+            shapeVelocity.y *= -1;
+            shapePosition.y = Clamp(shapePosition.y, 0, SCREEN_HEIGHT - shapeSize);
+        }
+
+        DrawRectangle(shapePosition.x, shapePosition.y, shapeSize, shapeSize, shapeColor);
+
+        prevCollision = collision;
+
+        if (collision && !prevCollision)
+        {
+            PlaySound(yay);
+        }
+
+        Vector2 circleCenter = { circlePosition.x + circleRadius, circlePosition.y + circleRadius };
+        DrawLine(circleCenter.x, circleCenter.y, mousePosition.x, mousePosition.y, YELLOW);
+
+        EndDrawing();
+    }
+
+    UnloadTexture(enterprise);
+    UnloadTexture(background);
+    UnloadSound(yay);
+    UnloadMusicStream(music);
+    CloseAudioDevice();
+    CloseWindow();
+
+    return 0;
 }
