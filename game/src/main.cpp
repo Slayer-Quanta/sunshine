@@ -32,8 +32,8 @@ int main(void)
 
     Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
 
-    bool collision = false;
-    bool prevCollision = false;
+    bool circleCollision = false;
+    bool prevCircleCollision = false;
 
     while (!WindowShouldClose())
     {
@@ -74,8 +74,8 @@ int main(void)
         Vector2 mousePosition = GetMousePosition();
 
         DrawCircle(circlePosition.x, circlePosition.y, circleRadius, circleColor);
-        bool collision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
-        if (collision)
+        circleCollision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
+        if (circleCollision)
             circleColor = BLUE;
         else
             circleColor = RED;
@@ -97,15 +97,15 @@ int main(void)
 
         DrawRectangle(shapePosition.x, shapePosition.y, shapeSize, shapeSize, shapeColor);
 
-        prevCollision = collision;
-
-        if (collision && !prevCollision)
+        if (circleCollision && !prevCircleCollision)
         {
             PlaySound(yay);
         }
 
         Vector2 circleCenter = { circlePosition.x + circleRadius, circlePosition.y + circleRadius };
         DrawLine(circleCenter.x, circleCenter.y, mousePosition.x, mousePosition.y, YELLOW);
+
+        prevCircleCollision = circleCollision;
 
         EndDrawing();
     }
