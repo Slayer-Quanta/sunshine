@@ -1,121 +1,88 @@
-#include "rlImGui.h"
 #include "raylib.h"
+#include "rlImGui.h"
 #include "Math.h"
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 
+struct Rigidbody
+{
+    Vector2 position;
+    Vector2 velocity;
+    Vector2 acceleration;
+};
+
+void UpdateRigidbody(Rigidbody& rigidbody, float dt)
+{
+    rigidbody.position = rigidbody.position + rigidbody.velocity * dt + rigidbody.acceleration * 0.5f * dt * dt;
+    rigidbody.velocity = rigidbody.velocity + rigidbody.acceleration * dt;
+
+    // Apply screen wrapping
+    if (rigidbody.position.y > SCREEN_HEIGHT) rigidbody.position.y = 0.0f;
+    if (rigidbody.position.y < 0.0f) rigidbody.position.y = SCREEN_HEIGHT;
+    if (rigidbody.position.x > SCREEN_WIDTH) rigidbody.position.x = 0.0f;
+    if (rigidbody.position.x < 0.0f) rigidbody.position.x = SCREEN_WIDTH;
+}
+
+void Seek(Rigidbody& rigidbody, const Vector2& target, float maxSpeed)
+{
+    Vector2 direction = Normalize(target - rigidbody.position);
+    rigidbody.acceleration = direction * maxSpeed - rigidbody.velocity;
+}
+
+void Flee(Rigidbody& rigidbody, const Vector2& target, float maxSpeed)
+{
+    Vector2 direction = Normalize(rigidbody.position - target);
+    rigidbody.acceleration = direction * maxSpeed - rigidbody.velocity;
+}
+
 int main(void)
 {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE");
-    InitAudioDevice();
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
+    rlImGuiSetup(true);
     SetTargetFPS(60);
 
-    Texture2D enterprise = LoadTexture("../game/assets/textures/enterprise.png");
-    Music music = LoadMusicStream("../game/assets/audio/DANGERZONE.MP3");
-    Sound yay = LoadSound("../game/assets/audio/yay.ogg");
-    PlayMusicStream(music);
+    Rigidbody seeker;
+    seeker.position = { SCREEN_WIDTH * 0.1f, SCREEN_HEIGHT * 0.9f };
+    seeker.velocity = {};
+    seeker.acceleration = {};
 
-    Vector2 enterprisePosition = { static_cast<float>(SCREEN_WIDTH) / 2, static_cast<float>(SCREEN_HEIGHT) / 2 };
-    Vector2 enterpriseSpeed = { 5.5f, 4.5f };
-    Color enterpriseColor = WHITE;
-    float enterpriseRotation = 0.0f;
-
-    Vector2 circlePosition = { 400, 300 };
-    float circleRadius = 50;
-    Color circleColor = RED;
-
-    Vector2 shapePosition = { 600, 400 };
-    float shapeSize = 40;
-    Color shapeColor = GREEN;
-    Vector2 shapeVelocity = { 4.0f, 4.5f };
-
-    Texture2D background = LoadTexture("../game/assets/textures/galaxy.png");
-
-    bool circleCollision = false;
-    bool prevCircleCollision = false;
+    Vector2 target{ SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
+    float seekerSpeed = 500.0f;
 
     while (!WindowShouldClose())
     {
-        UpdateMusicStream(music);
-        ClearBackground(RAYWHITE);
-        DrawTexture(background, 0, 0, WHITE);
+        const float dt = GetFrameTime();
 
-        if (IsKeyDown(KEY_W))
-            enterprisePosition.y -= 10.0f;
-        if (IsKeyDown(KEY_S))
-            enterprisePosition.y += 10.0f;
-        if (IsKeyDown(KEY_A))
-            enterprisePosition.x -= 7.0f;
-        if (IsKeyDown(KEY_D))
-            enterprisePosition.x += 7.0f;
+        UpdateRigidbody(seeker, dt);
+
+        Seek(seeker, target, seekerSpeed);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        enterprisePosition.x += enterpriseSpeed.x;
-        enterprisePosition.y += enterpriseSpeed.y;
+        DrawCircleV(seeker.position, 20.0f, RED);
+        DrawCircleV(target, 20.0f, BLUE);
 
-        if (enterprisePosition.x + enterprise.width >= SCREEN_WIDTH || enterprisePosition.x <= 0)
-        {
-            enterpriseSpeed.x *= -1;
-            enterprisePosition.x = Clamp(enterprisePosition.x, 0, SCREEN_WIDTH - enterprise.width);
-        }
-        if (enterprisePosition.y + enterprise.width >= SCREEN_HEIGHT || enterprisePosition.y <= 0)
-        {
-            enterpriseSpeed.y *= -1;
-            enterprisePosition.y = Clamp(enterprisePosition.y, 0, SCREEN_HEIGHT - enterprise.height);
-        }
+        // Draw line segments representing velocity and acceleration
+        DrawLineV(seeker.position, seeker.position + seeker.velocity, GREEN);
+        DrawLineV(seeker.position, seeker.position + seeker.acceleration, PURPLE);
 
-        enterpriseRotation += 1.0f;
-        DrawTexturePro(enterprise, { 0, 0, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
-            { enterprisePosition.x, enterprisePosition.y, static_cast<float>(enterprise.width), static_cast<float>(enterprise.height) },
-            { static_cast<float>(enterprise.width) / 2, static_cast<float>(enterprise.height) / 2 }, enterpriseRotation, enterpriseColor);
+        // Draw text labels for velocity and acceleration
+        DrawText("Velocity", seeker.position.x + seeker.velocity.x, seeker.position.y + seeker.velocity.y, 10, GREEN);
+        DrawText("Acceleration", seeker.position.x + seeker.acceleration.x, seeker.position.y + seeker.acceleration.y, 10, PURPLE);
 
-        Vector2 mousePosition = GetMousePosition();
-
-        DrawCircle(circlePosition.x, circlePosition.y, circleRadius, circleColor);
-        circleCollision = CheckCollisionCircles(circlePosition, circleRadius, mousePosition, circleRadius);
-        if (circleCollision)
-            circleColor = BLUE;
-        else
-            circleColor = RED;
-        DrawCircle(mousePosition.x, mousePosition.y, circleRadius, circleColor);
-
-        shapePosition.x += shapeVelocity.x;
-        shapePosition.y += shapeVelocity.y;
-
-        if (shapePosition.x + shapeSize >= SCREEN_WIDTH || shapePosition.x <= 0)
-        {
-            shapeVelocity.x *= -1;
-            shapePosition.x = Clamp(shapePosition.x, 0, SCREEN_WIDTH - shapeSize);
-        }
-        if (shapePosition.y + shapeSize >= SCREEN_HEIGHT || shapePosition.y <= 0)
-        {
-            shapeVelocity.y *= -1;
-            shapePosition.y = Clamp(shapePosition.y, 0, SCREEN_HEIGHT - shapeSize);
-        }
-
-        DrawRectangle(shapePosition.x, shapePosition.y, shapeSize, shapeSize, shapeColor);
-
-        if (circleCollision && !prevCircleCollision)
-        {
-            PlaySound(yay);
-        }
-
-        Vector2 circleCenter = { circlePosition.x + circleRadius, circlePosition.y + circleRadius };
-        DrawLine(circleCenter.x, circleCenter.y, mousePosition.x, mousePosition.y, YELLOW);
-
-        prevCircleCollision = circleCollision;
+        rlImGuiBegin();
+        ImGui::SliderFloat("Seeker speed", &seekerSpeed, -100.0f, 100.0f);
+        ImGui::SliderFloat2("Target", &target.x, 0.0f, SCREEN_WIDTH);
+        ImGui::SliderFloat2("Position", &seeker.position.x, 0.0f, SCREEN_WIDTH);
+        ImGui::SliderFloat2("Velocity", &seeker.velocity.x, -100.0f, 100.0f);
+        ImGui::SliderFloat2("Acceleration", &seeker.acceleration.x, -100.0f, 100.0f);
+        rlImGuiEnd();
 
         EndDrawing();
     }
 
-    UnloadTexture(enterprise);
-    UnloadTexture(background);
-    UnloadSound(yay);
-    UnloadMusicStream(music);
-    CloseAudioDevice();
+    rlImGuiShutdown();
     CloseWindow();
-
     return 0;
 }
