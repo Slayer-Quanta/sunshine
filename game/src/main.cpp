@@ -50,24 +50,27 @@ int main(void)
     Vector2 target{ SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
     float seekerSpeed = 500.0f;
 
+    bool isSeeking = true; // Toggle for Seek/Flee behavior
+
     while (!WindowShouldClose())
     {
         const float dt = GetFrameTime();
 
         UpdateRigidbody(seeker, dt);
 
-        Seek(seeker, target, seekerSpeed);
+        if (isSeeking)
+            Seek(seeker, target, seekerSpeed);
+        else
+            Flee(seeker, target, seekerSpeed);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
         DrawCircleV(seeker.position, 20.0f, RED);
         DrawCircleV(target, 20.0f, BLUE);
 
-        // Draw line segments representing velocity and acceleration
         DrawLineV(seeker.position, seeker.position + seeker.velocity, GREEN);
         DrawLineV(seeker.position, seeker.position + seeker.acceleration, PURPLE);
 
-        // Draw text labels for velocity and acceleration
         DrawText("Velocity", seeker.position.x + seeker.velocity.x, seeker.position.y + seeker.velocity.y, 10, GREEN);
         DrawText("Acceleration", seeker.position.x + seeker.acceleration.x, seeker.position.y + seeker.acceleration.y, 10, PURPLE);
 
@@ -77,8 +80,11 @@ int main(void)
         ImGui::SliderFloat2("Position", &seeker.position.x, 0.0f, SCREEN_WIDTH);
         ImGui::SliderFloat2("Velocity", &seeker.velocity.x, -100.0f, 100.0f);
         ImGui::SliderFloat2("Acceleration", &seeker.acceleration.x, -100.0f, 100.0f);
-        rlImGuiEnd();
 
+        if (ImGui::Button(isSeeking ? "Switch to Flee" : "Switch to Seek"))
+            isSeeking = !isSeeking;
+
+        rlImGuiEnd();
         EndDrawing();
     }
 
