@@ -22,16 +22,38 @@ void UpdateRigidbody(Rigidbody& rigidbody, float dt)
     if (rigidbody.position.x < 0.0f) rigidbody.position.x = SCREEN_WIDTH;
 }
 
-void Seek(Rigidbody& rigidbody, const Vector2& target, float maxSpeed)
+float Vector2Distance(const Vector2& a, const Vector2& b)
 {
-    Vector2 direction = Normalize(target - rigidbody.position);
-    rigidbody.acceleration = direction * maxSpeed - rigidbody.velocity;
+    float dx = b.x - a.x;
+    float dy = b.y - a.y;
+    return sqrtf(dx * dx + dy * dy);
 }
 
-void Avoid(const Vector2& obstacle, Rigidbody& rigidbody, float maxSpeed)
+bool CheckCollisionCircleCircle(const Vector2& center1, float radius1, const Vector2& center2, float radius2)
+{
+    float distance = Vector2Distance(center1, center2);
+    return distance < radius1 + radius2;
+}
+
+void Seek(Rigidbody& rigidbody, const Vector2& target, float maxSpeed, float avoidRadius)
+{
+    Vector2 direction = Normalize(target - rigidbody.position);
+    Vector2 desiredVelocity = direction * maxSpeed;
+
+    if (CheckCollisionCircleCircle(rigidbody.position, avoidRadius, target, 20.0f + avoidRadius))
+    {
+        Vector2 avoidDirection = Normalize(rigidbody.position - target);
+        Vector2 avoidPosition = target + avoidDirection * (20.0f + avoidRadius);
+        desiredVelocity = Normalize(avoidPosition - rigidbody.position) * maxSpeed;
+    }
+
+    rigidbody.acceleration = desiredVelocity - rigidbody.velocity;
+}
+
+void Avoid(const Vector2& obstacle, Rigidbody& rigidbody, float maxSpeed, float avoidRadius)
 {
     Vector2 direction = Normalize(rigidbody.position - obstacle);
-    Vector2 rightDirection = { -direction.y, direction.x };  // Perpendicular to the obstacle direction
+    Vector2 rightDirection = { -direction.y, direction.x };
     rigidbody.acceleration = rightDirection * maxSpeed - rigidbody.velocity;
 }
 
@@ -48,6 +70,7 @@ int main(void)
 
     Vector2 target{ SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
     float seekerSpeed = 500.0f;
+    float avoidRadius = 40.0f;
 
     Vector2 obstaclePosition{ SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f };
 
@@ -61,41 +84,48 @@ int main(void)
 
         // Check left collision
         Vector2 leftProbe = seeker.position + Vector2{ -direction.y, direction.x } *20.0f;
-        bool leftCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { leftProbe.x, leftProbe.y, 1.0f, 1.0f });
+        bool leftCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, leftProbe, 1.0f);
         if (leftCollision)
         {
-            Vector2 rightDirection = { -direction.y, direction.x };  // Perpendicular to the left direction
-            seeker.acceleration = rightDirection * seekerSpeed - seeker.velocity;
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
         }
 
-        // Check right collision
         Vector2 rightProbe = seeker.position + Vector2{ direction.y, -direction.x } *20.0f;
-        bool rightCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { rightProbe.x, rightProbe.y, 1.0f, 1.0f });
+        bool rightCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, rightProbe, 1.0f);
         if (rightCollision)
         {
-            Vector2 leftDirection = { direction.y, -direction.x };  // Perpendicular to the right direction
-            seeker.acceleration = leftDirection * seekerSpeed - seeker.velocity;
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
         }
+        Vector2 LeftProbe = seeker.position + Vector2{ -direction.y, direction.x } *40.0f;
+        Vector2 RightProbe = seeker.position + Vector2{ direction.y, -direction.x } *40.0f;
 
-        // Additional left and right probes
-        Vector2 additionalLeftProbe = seeker.position + Vector2{ -direction.y, direction.x } *40.0f;
-        Vector2 additionalRightProbe = seeker.position + Vector2{ direction.y, -direction.x } *40.0f;
-
-        // Check additional left collision
-        bool additionalLeftCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { additionalLeftProbe.x, additionalLeftProbe.y, 1.0f, 1.0f });
+        bool additionalLeftCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, LeftProbe, 1.0f);
         if (additionalLeftCollision)
         {
-            Avoid(obstaclePosition, seeker, seekerSpeed);
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
         }
-
-        // Check additional right collision
-        bool additionalRightCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { additionalRightProbe.x, additionalRightProbe.y, 1.0f, 1.0f });
+        bool additionalRightCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, RightProbe, 1.0f);
         if (additionalRightCollision)
         {
-            Avoid(obstaclePosition, seeker, seekerSpeed);
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
         }
 
-        Seek(seeker, target, seekerSpeed);
+        Vector2 topProbe = seeker.position + Vector2{ direction.x, direction.y } *40.0f;
+        Vector2 bottomProbe = seeker.position + Vector2{ -direction.x, -direction.y } *40.0f;
+
+        bool topCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, topProbe, 1.0f);
+        if (topCollision)
+        {
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
+        }
+
+        bool bottomCollision = CheckCollisionCircleCircle(obstaclePosition, 20.0f, bottomProbe, 1.0f);
+        if (bottomCollision)
+        {
+            Avoid(obstaclePosition, seeker, seekerSpeed, avoidRadius);
+        }
+
+        Seek(seeker, target, seekerSpeed, avoidRadius);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
@@ -108,12 +138,14 @@ int main(void)
         DrawText("Velocity", seeker.position.x + seeker.velocity.x, seeker.position.y + seeker.velocity.y, 10, GREEN);
         DrawText("Acceleration", seeker.position.x + seeker.acceleration.x, seeker.position.y + seeker.acceleration.y, 10, PURPLE);
 
-        // Draw additional left and right probes
-        DrawCircleV(additionalLeftProbe, 5.0f, ORANGE);
-        DrawCircleV(additionalRightProbe, 5.0f, ORANGE);
+        DrawCircleV(LeftProbe, 5.0f, ORANGE);
+        DrawCircleV(RightProbe, 5.0f, ORANGE);
+        DrawCircleV(topProbe, 5.0f, ORANGE);
+        DrawCircleV(bottomProbe, 5.0f, ORANGE);
 
         rlImGuiBegin();
         ImGui::SliderFloat("Seeker speed", &seekerSpeed, -100.0f, 100.0f);
+        ImGui::SliderFloat("Avoid radius", &avoidRadius, 0.0f, 100.0f);
         ImGui::SliderFloat2("Target", &target.x, 0.0f, SCREEN_WIDTH);
         ImGui::SliderFloat2("Position", &seeker.position.x, 0.0f, SCREEN_WIDTH);
         ImGui::SliderFloat2("Velocity", &seeker.velocity.x, -100.0f, 100.0f);
