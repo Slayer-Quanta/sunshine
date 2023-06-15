@@ -1,112 +1,155 @@
 #include "rlImGui.h"
-#include "Physics.h"
-#include "Collision.h"
-
+#include "Math.h"
 #include <array>
+#include <cmath>
 #include <vector>
 #include <string>
-#include <iostream>
-#include <fstream>
+
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
+#define TILE_COUNT 10
 
 using namespace std;
 
+constexpr float TILE_WIDTH = SCREEN_WIDTH / (float)TILE_COUNT;
+constexpr float TILE_HEIGHT = SCREEN_HEIGHT / (float)TILE_COUNT;
+
+enum TileType : size_t
+{
+    MOUNTAIN,
+    MUD,
+    WATER,
+    GRASS,
+    AIR,
+    COUNT
+};
+
+struct Cell
+{
+    int col = -1;
+    int row = -1;
+};
+
+Cell ScreenToTile(Vector2 position)
+{
+    return { int(position.x / TILE_WIDTH), int(position.y / TILE_HEIGHT) };
+}
+
+Vector2 TileToScreen(Cell cell)
+{
+    return { cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT };
+}
+
+Vector2 TileCenter(Cell cell)
+{
+    return TileToScreen(cell) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+}
+
+void DrawTile(Cell cell, Color color)
+{
+    DrawRectangle(cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, color);
+}
+
+void DrawTile(Cell cell, TileType type)
+{
+    Color color = WHITE;
+    switch (type)
+    {
+    case MOUNTAIN:
+        color = DARKGRAY;
+        break;
+
+    case MUD:
+        color = BROWN;
+        break;
+
+    case WATER:
+        color = BLUE;
+        color.b = 180;
+        break;
+
+    case GRASS:
+        color = GREEN;
+        color.g = 180;
+        break;
+    }
+    DrawTile(cell, color);
+}
+
+int ManhattanDistance(Cell currentCell, Cell goal)
+{
+    int distance = abs(currentCell.col - goal.col) + abs(currentCell.row - goal.row);
+    return distance;
+
+}
+vector<Cell> Neighbours(Cell cell)
+{
+    vector<Cell> neighbors;
+    vector<Cell> offsets{
+        {0, -1},  
+        {0, 1},   
+        {-1, 0},  
+        {1, 0},   
+        {-1, -1}, 
+        {1, -1}, 
+        {-1, 1},  
+        {1, 1}   
+    };
+    for (const auto& offset : offsets)
+    {
+        Cell adjacentCell{ cell.col + offset.col, cell.row + offset.row };
+        neighbors.push_back(adjacentCell);
+    }
+
+    return neighbors;
+}
+
 int main(void)
 {
-    const int screenWidth = 1280;
-    const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Sunshine");
-    rlImGuiSetup(true);
-
-    vector<Rectangle> obstacles;
-    std::ifstream inFile("../game/assets/data/obstacles.txt");
-    while (!inFile.eof())
-    {
-        Rectangle obstacle;
-        inFile >> obstacle.x >> obstacle.y >> obstacle.width >> obstacle.height;
-        obstacles.push_back(obstacle);
-    }
-    inFile.close();
-
-    float playerRotation = 0.0f;
-    const float playerWidth = 60.0f;
-    const float playerHeight = 40.0f;
-    const float playerRange = 1000.0f;
-    const float playerRotationSpeed = 100.0f;
-
-    const char* recText = "Nearest to Rectangle";
-    const char* circleText = "Nearest to Circle";
-    const char* poiText = "Nearest Intersection";
-    const int fontSize = 10;
-    const int recTextWidth = MeasureText(recText, fontSize);
-    const int circleTextWidth = MeasureText(circleText, fontSize);
-    const int poiTextWidth = MeasureText(poiText, fontSize);
-
-    const Rectangle rectangle{ 1000.0f, 500.0f, 160.0f, 90.0f };
-    const Circle circle{ { 1000.0f, 250.0f }, 50.0f };
-
-    bool demoGUI = false;
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
     SetTargetFPS(60);
+
+    array<array<size_t, TILE_COUNT>, TILE_COUNT> tiles
+    {
+        array<size_t, TILE_COUNT>{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 1, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 2, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 3, 3, 1, 1, 1, 4, 4, 4, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    };
+
+    Cell start{ 1, 1 };
+    Cell goal{ 8, 8 };
+
     while (!WindowShouldClose())
     {
-        float dt = GetFrameTime();
-        if (IsKeyDown(KEY_E))
-            playerRotation += playerRotationSpeed * dt;
-        if (IsKeyDown(KEY_Q))
-            playerRotation -= playerRotationSpeed * dt;
-
-        const Vector2 playerPosition = GetMousePosition();
-        const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
-        const Vector2 playerEnd = playerPosition + playerDirection * playerRange;
-        const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
-
-        const Vector2 nearestRecPoint = NearestPoint(playerPosition, playerEnd,
-            { rectangle.x + rectangle.width * 0.5f, rectangle.y + rectangle.height * 0.5f });
-        const Vector2 nearestCirclePoint = NearestPoint(playerPosition, playerEnd, circle.position);
-        Vector2 poi;
-
-        const bool collision = NearestIntersection(playerPosition, playerEnd, obstacles, poi);
-        const bool rectangleVisible = IsRectangleVisible(playerPosition, playerEnd, rectangle, obstacles);
-        const bool circleVisible = IsCircleVisible(playerPosition, playerEnd, circle, obstacles);
-
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        // Render player
-        DrawRectanglePro(playerRec, { playerWidth * 0.5f, playerHeight * 0.5f }, playerRotation, PURPLE);
-        DrawLine(playerPosition.x, playerPosition.y, playerEnd.x, playerEnd.y, BLUE);
-        DrawCircleV(playerPosition, 10.0f, BLUE);
-
-        // Render geometry
-        for (const Rectangle& obstacle : obstacles)
-            DrawRectangleRec(obstacle, GREEN);
-        DrawRectangleRec(rectangle, rectangleVisible ? GREEN : RED);
-        DrawCircleV(circle.position, circle.radius, circleVisible ? GREEN : RED);
-
-        // Render labels
-        DrawText(circleText, nearestCirclePoint.x - circleTextWidth * 0.5f, nearestCirclePoint.y - fontSize * 2, fontSize, BLUE);
-        DrawCircleV(nearestRecPoint, 10.0f, BLUE);
-        DrawText(recText, nearestRecPoint.x - recTextWidth * 0.5f, nearestRecPoint.y - fontSize * 2, fontSize, BLUE);
-        DrawCircleV(nearestCirclePoint, 10.0f, BLUE);
-        if (collision)
+        for (int row = 0; row < TILE_COUNT; row++)
         {
-            DrawText(poiText, poi.x - poiTextWidth * 0.5f, poi.y - fontSize * 2, fontSize, BLUE);
-            DrawCircleV(poi, 10.0f, BLUE);
+            for (int col = 0; col < TILE_COUNT; col++)
+            {
+                // TODO -- calculate cost of each tile to the goal tile
+                DrawTile({ col, row }, (TileType)tiles[row][col]);
+                Vector2 texPos = TileCenter({ col, row });
+                int distance = ManhattanDistance({ col, row }, goal);
+                DrawText(to_string(distance).c_str(), texPos.x, texPos.y, 10, MAROON);
+            }
         }
-
-        // Render GUI
-        if (IsKeyPressed(KEY_GRAVE)) demoGUI = !demoGUI;
-        if (demoGUI)
-        {
-            rlImGuiBegin();
-            ImGui::ShowDemoWindow(nullptr);
-            rlImGuiEnd();
-        }
+        DrawTile(ScreenToTile(GetMousePosition()), RED);
+        DrawTile(start, DARKBLUE);
+        DrawTile(goal, SKYBLUE);
 
         EndDrawing();
     }
 
-    rlImGuiShutdown();
     CloseWindow();
-
     return 0;
 }
+
