@@ -1,129 +1,328 @@
 #include "raylib.h"
-#include "rlImGui.h"
 #include "Math.h"
+#include "Collision.h"
+#include <vector>
 
-#define SCREEN_WIDTH 1280
+using namespace std;
+
+#define SCREEN_WIDTH 1268
 #define SCREEN_HEIGHT 720
 
 struct Rigidbody
 {
-    Vector2 position;
-    Vector2 velocity;
-    Vector2 acceleration;
+    Vector2 position{};
+    Vector2 velocity{};
+    Vector2 acceleration{};
+    Vector2 direction{};
+    float Rotation{};
+    float Speed{};
 };
 
-void UpdateRigidbody(Rigidbody& rigidbody, float dt)
+struct Obstacle
 {
-    rigidbody.position = rigidbody.position + rigidbody.velocity * dt + rigidbody.acceleration * 0.5f * dt * dt;
-    rigidbody.velocity = rigidbody.velocity + rigidbody.acceleration * dt;
-    if (rigidbody.position.y > SCREEN_HEIGHT) rigidbody.position.y = 0.0f;
-    if (rigidbody.position.y < 0.0f) rigidbody.position.y = SCREEN_HEIGHT;
-    if (rigidbody.position.x > SCREEN_WIDTH) rigidbody.position.x = 0.0f;
-    if (rigidbody.position.x < 0.0f) rigidbody.position.x = SCREEN_WIDTH;
-}
+    Vector2 position{};
+    float radius{};
+};
 
-void Seek(Rigidbody& rigidbody, const Vector2& target, float maxSpeed)
+struct Food
 {
-    Vector2 direction = Normalize(target - rigidbody.position);
-    rigidbody.acceleration = direction * maxSpeed - rigidbody.velocity;
-}
+    Vector2 position{};
+    float radius{};
+};
 
-void Avoid(const Vector2& obstacle, Rigidbody& rigidbody, float maxSpeed)
+class Fish
 {
-    Vector2 direction = Normalize(rigidbody.position - obstacle);
-    Vector2 rightDirection = { -direction.y, direction.x };  // Perpendicular to the obstacle direction
-    rigidbody.acceleration = rightDirection * maxSpeed - rigidbody.velocity;
-}
+public:
+    Rigidbody rigidbody;
+    Texture2D texture;
+    float width;
+    float height;
+    float maxSpeed;
+    float maxAcceleration;
+    Fish(const Vector2& position, const Texture2D& texture, float width, float height, float speed, float acceleration) : maxSpeed(speed), maxAcceleration(acceleration)
+    {
+        this->texture = texture;
+        this->width = width;
+        this->height = height;
+        rigidbody.position = position;
+        rigidbody.velocity = { 0, 0 };
+        rigidbody.direction = { 1, 0 };
+        rigidbody.Rotation = 0.0f;
+    }
+    void UpdateRigidBody(float deltaTime)
+    {
+        rigidbody.velocity = rigidbody.velocity + (rigidbody.acceleration * deltaTime);
+        float speed = Length(rigidbody.velocity);
+        if (speed > maxSpeed)
+        {
+            rigidbody.velocity = Normalize(rigidbody.velocity) * maxSpeed;
+        }
+        rigidbody.position = rigidbody.position + (rigidbody.velocity * deltaTime);
+        if (speed > 0)
+        {
+            rigidbody.direction = Normalize(rigidbody.velocity);
+        }
+        rigidbody.Rotation = atan2f(rigidbody.direction.y, rigidbody.direction.x) * RAD2DEG;
+        rigidbody.acceleration = { 0, 0 };
+    }
+    void Draw() const
+    {
+        Rectangle sourceRect = { 0, 0, (float)texture.width, (float)texture.height };
+        Rectangle destRect = { rigidbody.position.x, rigidbody.position.y, width, height };
+        Vector2 origin = { width / 2.0f, height / 2.0f };
+        DrawTexturePro(texture, sourceRect, destRect, origin, rigidbody.Rotation, WHITE);
+    }
+};
 
-int main(void)
+float Distance(const Vector2& v1, const Vector2& v2)
 {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE");
-    rlImGuiSetup(true);
+    float dx = v2.x - v1.x;
+    float dy = v2.y - v1.y;
+    return (dx * dx) + (dy * dy);
+}
+int main()
+{
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE Aquarium");
     SetTargetFPS(60);
 
-    Rigidbody seeker;
-    seeker.position = { SCREEN_WIDTH * 0.1f, SCREEN_HEIGHT * 0.9f };
-    seeker.velocity = {};
-    seeker.acceleration = {};
+    Texture2D Background = LoadTexture("../game/assets/textures/Coral reef.png");
+    Texture2D fishTexture = LoadTexture("../game/assets/textures/Fish.png");
+    vector<Fish> fish;
+    fish.push_back(Fish({ 100, 200 }, fishTexture, 100, 90, 250.0f, 300.0f));
+  
+    fish.push_back(Fish({ 200, 300 }, fishTexture, 100, 90, 300.0f, 400.0f));
+    fish.push_back(Fish({ 300, 400 }, fishTexture, 100, 90, 350.0f, 500.0f));
+    
+    fish.push_back(Fish({ 400, 500 }, fishTexture, 100, 90, 400.0f, 350.0f));
+    fish.push_back(Fish({ 500, 600 }, fishTexture, 100, 90, 300.0f, 400.0f));
+   
+    fish.push_back(Fish({ 600, 700 }, fishTexture, 100, 90, 350.0f, 450.0f));
+    fish.push_back(Fish({ 700, 800 }, fishTexture, 100, 90, 275.0f, 250.0f));
 
-    Vector2 target{ SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
-    float seekerSpeed = 500.0f;
+    fish.push_back(Fish({ 800, 900 }, fishTexture, 100, 90, 400.0f, 300.0f));
+    fish.push_back(Fish({ 900, 1000 }, fishTexture, 100, 90, 450.0f, 350.0f));
+    fish.push_back(Fish({ 1000, 1100 }, fishTexture, 100, 90, 500.0f, 400.0f));
 
-    Vector2 obstaclePosition{ SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f };
+    vector<Obstacle> obstacles;
+    vector<Food> foods;
+
+    Vector2 targetPosition{};
+    bool Seek = false;
+    bool Flee = false;
+    bool Arrival = false;
+    bool Avoid = false;
+
 
     while (!WindowShouldClose())
     {
-        const float dt = GetFrameTime();
-
-        UpdateRigidbody(seeker, dt);
-
-        Vector2 direction = Normalize(target - seeker.position);
-
-        // Check left collision
-        Vector2 leftProbe = seeker.position + Vector2{ -direction.y, direction.x } *20.0f;
-        bool leftCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { leftProbe.x, leftProbe.y, 1.0f, 1.0f });
-        if (leftCollision)
-        {
-            Vector2 rightDirection = { -direction.y, direction.x };  // Perpendicular to the left direction
-            seeker.acceleration = rightDirection * seekerSpeed - seeker.velocity;
-        }
-
-        // Check right collision
-        Vector2 rightProbe = seeker.position + Vector2{ direction.y, -direction.x } *20.0f;
-        bool rightCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { rightProbe.x, rightProbe.y, 1.0f, 1.0f });
-        if (rightCollision)
-        {
-            Vector2 leftDirection = { direction.y, -direction.x };  // Perpendicular to the right direction
-            seeker.acceleration = leftDirection * seekerSpeed - seeker.velocity;
-        }
-
-        // Additional left and right probes
-        Vector2 additionalLeftProbe = seeker.position + Vector2{ -direction.y, direction.x } *40.0f;
-        Vector2 additionalRightProbe = seeker.position + Vector2{ direction.y, -direction.x } *40.0f;
-
-        // Check additional left collision
-        bool additionalLeftCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { additionalLeftProbe.x, additionalLeftProbe.y, 1.0f, 1.0f });
-        if (additionalLeftCollision)
-        {
-            Avoid(obstaclePosition, seeker, seekerSpeed);
-        }
-
-        // Check additional right collision
-        bool additionalRightCollision = CheckCollisionCircleRec(obstaclePosition, 20.0f, { additionalRightProbe.x, additionalRightProbe.y, 1.0f, 1.0f });
-        if (additionalRightCollision)
-        {
-            Avoid(obstaclePosition, seeker, seekerSpeed);
-        }
-
-        Seek(seeker, target, seekerSpeed);
-
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        DrawCircleV(seeker.position, 20.0f, RED);
-        DrawCircleV(target, 20.0f, BLUE);
+        float deltaTime = GetFrameTime();
 
-        DrawLineV(seeker.position, seeker.position + seeker.velocity, GREEN);
-        DrawLineV(seeker.position, seeker.position + seeker.acceleration, PURPLE);
+        if (IsKeyPressed(KEY_SPACE))
+        {
+            fish.clear();
+            fish.push_back(Fish({ 100, 200 }, fishTexture, 100, 90, 250.0f, 300.0f));
+           
+            fish.push_back(Fish({ 200, 300 }, fishTexture, 100, 90, 300.0f, 400.0f));
+            fish.push_back(Fish({ 300, 400 }, fishTexture, 100, 90, 350.0f, 500.0f));
+            
+            fish.push_back(Fish({ 400, 500 }, fishTexture, 100, 90, 400.0f, 350.0f));
+            fish.push_back(Fish({ 500, 600 }, fishTexture, 100, 90, 300.0f, 400.0f));
+           
+            fish.push_back(Fish({ 600, 700 }, fishTexture, 100, 90, 350.0f, 450.0f));
+            fish.push_back(Fish({ 700, 800 }, fishTexture, 100, 90, 275.0f, 250.0f));
 
-        DrawText("Velocity", seeker.position.x + seeker.velocity.x, seeker.position.y + seeker.velocity.y, 10, GREEN);
-        DrawText("Acceleration", seeker.position.x + seeker.acceleration.x, seeker.position.y + seeker.acceleration.y, 10, PURPLE);
+            fish.push_back(Fish({ 800, 900 }, fishTexture, 100, 90, 400.0f, 300.0f));
+            fish.push_back(Fish({ 900, 1000 }, fishTexture, 100, 90, 450.0f, 350.0f));
+            fish.push_back(Fish({ 1000, 1100 }, fishTexture, 100, 90, 500.0f, 400.0f));
 
-        // Draw additional left and right probes
-        DrawCircleV(additionalLeftProbe, 5.0f, ORANGE);
-        DrawCircleV(additionalRightProbe, 5.0f, ORANGE);
 
-        rlImGuiBegin();
-        ImGui::SliderFloat("Seeker speed", &seekerSpeed, -100.0f, 100.0f);
-        ImGui::SliderFloat2("Target", &target.x, 0.0f, SCREEN_WIDTH);
-        ImGui::SliderFloat2("Position", &seeker.position.x, 0.0f, SCREEN_WIDTH);
-        ImGui::SliderFloat2("Velocity", &seeker.velocity.x, -100.0f, 100.0f);
-        ImGui::SliderFloat2("Acceleration", &seeker.acceleration.x, -100.0f, 100.0f);
-        rlImGuiEnd();
+            Seek = false;
+            Flee = false;
+            Arrival = false;
+            Avoid = false;
+        }
+        if (IsKeyPressed(KEY_ONE))
+        {
+            Seek = true;
+            Flee = false;
+            Arrival = false;
+            Avoid = false;          
+        }
+        else if (IsKeyPressed(KEY_TWO))
+        {
+            Seek = false;
+            Flee = true;
+            Arrival = false;
+            Avoid = false;
+            
+        }
+        else if (IsKeyPressed(KEY_THREE))
+        {
+            Seek = false;
+            Flee = false;
+            Arrival = true;
+            Avoid = false;
+        }
+        else if (IsKeyPressed(KEY_FOUR))
+        {
+            Seek = false;
+            Flee = false;
+            Arrival = false;
+            Avoid = true;
+        }
+
+        if (IsMouseButtonUp(MOUSE_LEFT_BUTTON))
+        {
+            if (Seek)
+            {
+                targetPosition = GetMousePosition();
+            }
+        }
+
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+        {
+            if (Avoid)
+            {
+                Obstacle obstacle;
+                obstacle.position = GetMousePosition();
+                obstacle.radius = 10;
+                obstacles.push_back(obstacle);
+            }
+        }
+
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+        {
+            if (Arrival)
+            {
+                Food food;
+                food.position = GetMousePosition();
+                food.radius = 10;
+                foods.push_back(food);
+            }
+        }
+        for (Fish& fish : fish)
+        {
+            if (Seek)
+            {
+                Vector2 desiredVel = targetPosition - fish.rigidbody.position;
+                desiredVel = Normalize(desiredVel) * fish.maxSpeed;
+                Vector2 steering = desiredVel - fish.rigidbody.velocity;
+                fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
+            }
+            if (Flee)
+            {
+                Vector2 predatorPosition = GetMousePosition();
+                Vector2 desiredVel = fish.rigidbody.position - predatorPosition;
+                desiredVel = Normalize(desiredVel) * fish.maxSpeed;
+                Vector2 steering = desiredVel - fish.rigidbody.velocity;
+                fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
+             
+            }
+            if (Arrival)
+            {
+                for (const Food& food : foods)
+                {
+                    Vector2 desiredVel = food.position - fish.rigidbody.position;
+                    float distance = Length(desiredVel);
+                    float slowRadius = 100.0f;
+                    float arriveRadius = 25.0f;
+
+                    if (distance > slowRadius)
+                    {
+                        desiredVel = Normalize(desiredVel) * fish.maxSpeed;
+                    }
+                    else if (distance > arriveRadius)
+                    {
+                        float t = distance / slowRadius;
+                        desiredVel = Normalize(desiredVel) * fish.maxSpeed * t;
+                    }
+                    else
+                    {
+                        desiredVel = { 0, 0 };
+                    }
+
+                    Vector2 steering = desiredVel - fish.rigidbody.velocity;
+                    fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
+                    for (auto it = foods.begin(); it != foods.end(); ++it)
+                    {
+                        const Food& food = *it;
+                        if (CheckCollisionCircleRec(fish.rigidbody.position, fish.width * 0.5f, { food.position.x - food.radius, food.position.y - food.radius, food.radius * 2, food.radius * 2 }))
+                        {
+                          foods.erase(it);
+                          break;
+                        }
+                    }
+                }
+            }
+            if (Avoid)
+            {
+             targetPosition = GetMousePosition();
+              Vector2 desiredVel = targetPosition - fish.rigidbody.position;
+              desiredVel = Normalize(desiredVel) * fish.maxSpeed;
+              Vector2 steering = desiredVel - fish.rigidbody.velocity;
+              fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
+
+                for (const Obstacle& obstacle : obstacles)
+                {
+                    Vector2 desiredVel = fish.rigidbody.position - obstacle.position;
+                    float distance = Length(desiredVel);
+                    float avoidRadius = 50.0f;
+
+                    if (distance < avoidRadius)
+                    {
+                        desiredVel = Normalize(desiredVel) * fish.maxSpeed;
+                        Vector2 steering = desiredVel - fish.rigidbody.velocity;
+                        fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
+                    }
+                }
+            }
+            fish.UpdateRigidBody(deltaTime);
+            if (fish.rigidbody.position.x > SCREEN_WIDTH)
+                fish.rigidbody.position.x = 0;
+            else if (fish.rigidbody.position.x < 0)
+                fish.rigidbody.position.x = SCREEN_WIDTH;
+
+            if (fish.rigidbody.position.y > SCREEN_HEIGHT)
+                fish.rigidbody.position.y = 0;
+            else if (fish.rigidbody.position.y < 0)
+                fish.rigidbody.position.y = SCREEN_HEIGHT;
+        }
+        DrawTexture(Background, 0, 0, RAYWHITE);
+        for (const Fish& fish : fish)
+        {
+            fish.Draw();
+        }
+        if (Seek || Avoid)
+        {
+            DrawCircle(targetPosition.x, targetPosition.y, 10, ORANGE);
+        }
+        if (Avoid)
+        {
+            for (const Obstacle& obstacle : obstacles)
+            {
+                DrawCircle(obstacle.position.x, obstacle.position.y, obstacle.radius, YELLOW);
+            }
+        }
+        if (Arrival)
+        {
+            for (const Food& food : foods)
+            {
+                DrawCircle(food.position.x, food.position.y, food.radius, GREEN);
+            }
+        }
+        DrawText("Press 1 for Seek", 10, 10, 20, WHITE);
+        DrawText("Press 2 for Flee", 200, 10, 20, WHITE);
+        DrawText("Press 3 for Arrive", 400, 10, 20, WHITE);
+        DrawText("Press 4 for Avoid", 600, 10, 20, WHITE);
+        DrawText("Press SPACE to reset", 800, 10, 20, WHITE);
+
 
         EndDrawing();
     }
-
-    rlImGuiShutdown();
+    UnloadTexture(Background);
+    UnloadTexture(fishTexture);
     CloseWindow();
     return 0;
 }

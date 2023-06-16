@@ -3,16 +3,16 @@
 
 struct Rigidbody
 {
-    Vector2 vel{ 0.0f, 0.0f };
-    Vector2 acc{ 0.0f, 0.0f };
+    Vector2 velocity{ 0.0f, 0.0f };
+    Vector2 acceleration{ 0.0f, 0.0f };
 };
 
 // v2 = v1 + a(t)
 // p2 = p1 + v2(t) + 0.5a(t^2)
 Vector2 Integrate(const Vector2& pos, Rigidbody& rb, float dt)
 {
-    rb.vel = rb.vel + rb.acc * dt;
-    return pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
+    rb.velocity = rb.velocity + rb.acceleration * dt;
+    return pos + rb.velocity * dt + rb.acceleration * dt * dt * 0.5f;
 }
 
 // vf^2 = vi^2 + 2a(d)
