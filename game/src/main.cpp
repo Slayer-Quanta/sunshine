@@ -311,14 +311,10 @@ int main(void)
         {
             for (int col = 0; col < TILE_COUNT; col++)
             {
-                // We know g score is always 1 when using manhattan distance so just use that for g
                 Cell cell{ col, row };
-                float g = 1.0f;
+                float g = manhattan ? Manhattan(cell, goal) : Euclidean(cell, goal);
                 float h = Manhattan(cell, goal);
 
-                // Late task 2:
-                // Upgrade this by switching between manhattan and euclidean if you have yet to hand in lab exercise 4
-                // Also consider building a static grid representation where each tile stores its neighbours
                 DrawTile(cell, map);
                 Vector2 texPos = TileCenter(cell);
                 DrawText(TextFormat("F: %f", g + h), texPos.x, texPos.y, 10, MAROON);
@@ -338,12 +334,12 @@ int main(void)
         // We can see quantization & localization in-action if we convert the cursor to tile coordinates
         //DrawText(TextFormat("row %i, col %i", cursorTile.row, cursorTile.col), cursor.x, cursor.y, 20, DARKGRAY);
 
-       // ...
-
         rlImGuiBegin();
+
 
         bool startChanged = false;
         bool goalChanged = false;
+        bool manhattanChanged = false;
 
         if (ImGui::Button("Find path"))
         {
@@ -354,16 +350,15 @@ int main(void)
         goalChanged = ImGui::SliderInt2("Goal", &goal.col, 0, TILE_COUNT - 1);
         ImGui::Checkbox("Toggle Manhattan", &manhattan);
 
-        if (startChanged || goalChanged)
+        if (startChanged || goalChanged || manhattanChanged)
         {
-            path = FindPath(start, goal, map, true);
+            path = FindPath(start, goal, map, manhattan);
         }
 
         rlImGuiEnd();
 
         EndDrawing();
-        // ...
-
+      
     }
 
     rlImGuiShutdown();
