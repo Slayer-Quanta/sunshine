@@ -1,328 +1,372 @@
-#include "raylib.h"
+#include "rlImGui.h"
 #include "Math.h"
-#include "Collision.h"
+#include <array>
 #include <vector>
+#include <queue>
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
+#define TILE_COUNT 10
 
 using namespace std;
 
-#define SCREEN_WIDTH 1268
-#define SCREEN_HEIGHT 720
+constexpr float TILE_WIDTH = SCREEN_WIDTH / (float)TILE_COUNT;
+constexpr float TILE_HEIGHT = SCREEN_HEIGHT / (float)TILE_COUNT;
 
-struct Rigidbody
+using Map = array<array<size_t, TILE_COUNT>, TILE_COUNT>;
+
+enum TileType : size_t
 {
-    Vector2 position{};
-    Vector2 velocity{};
-    Vector2 acceleration{};
-    Vector2 direction{};
-    float Rotation{};
-    float Speed{};
+    AIR,
+    GRASS,
+    WATER,
+    MUD,
+    MOUNTAIN,
+    COUNT
 };
 
-struct Obstacle
+struct Cell
 {
-    Vector2 position{};
-    float radius{};
+    int col = -1;
+    int row = -1;
 };
 
-struct Food
+float Manhattan(Cell a, Cell b)
 {
-    Vector2 position{};
-    float radius{};
-};
-
-class Fish
-{
-public:
-    Rigidbody rigidbody;
-    Texture2D texture;
-    float width;
-    float height;
-    float maxSpeed;
-    float maxAcceleration;
-    Fish(const Vector2& position, const Texture2D& texture, float width, float height, float speed, float acceleration) : maxSpeed(speed), maxAcceleration(acceleration)
-    {
-        this->texture = texture;
-        this->width = width;
-        this->height = height;
-        rigidbody.position = position;
-        rigidbody.velocity = { 0, 0 };
-        rigidbody.direction = { 1, 0 };
-        rigidbody.Rotation = 0.0f;
-    }
-    void UpdateRigidBody(float deltaTime)
-    {
-        rigidbody.velocity = rigidbody.velocity + (rigidbody.acceleration * deltaTime);
-        float speed = Length(rigidbody.velocity);
-        if (speed > maxSpeed)
-        {
-            rigidbody.velocity = Normalize(rigidbody.velocity) * maxSpeed;
-        }
-        rigidbody.position = rigidbody.position + (rigidbody.velocity * deltaTime);
-        if (speed > 0)
-        {
-            rigidbody.direction = Normalize(rigidbody.velocity);
-        }
-        rigidbody.Rotation = atan2f(rigidbody.direction.y, rigidbody.direction.x) * RAD2DEG;
-        rigidbody.acceleration = { 0, 0 };
-    }
-    void Draw() const
-    {
-        Rectangle sourceRect = { 0, 0, (float)texture.width, (float)texture.height };
-        Rectangle destRect = { rigidbody.position.x, rigidbody.position.y, width, height };
-        Vector2 origin = { width / 2.0f, height / 2.0f };
-        DrawTexturePro(texture, sourceRect, destRect, origin, rigidbody.Rotation, WHITE);
-    }
-};
-
-float Distance(const Vector2& v1, const Vector2& v2)
-{
-    float dx = v2.x - v1.x;
-    float dy = v2.y - v1.y;
-    return (dx * dx) + (dy * dy);
+    return abs(b.col - a.col) + abs(b.row - a.row);
 }
-int main()
+
+float Euclidean(Cell a, Cell b)
 {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "SUNSHINE Aquarium");
+    return sqrtf(powf(b.col - a.col, 2.0f) + powf(b.row - a.row, 2.0f));
+    //return sqrtf((b.col - a.col) * (b.col - a.col) + (b.row - a.row) * (b.row - a.row));
+    // Identical to the above implementation
+}
+
+// From game world to graph world "Quantization"
+Cell ScreenToTile(Vector2 position)
+{
+    return { int(position.x / TILE_WIDTH), int(position.y / TILE_HEIGHT) };
+}
+
+// From graph world to game world "Localization"
+Vector2 TileToScreen(Cell cell)
+{
+    return { cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT };
+}
+
+Vector2 TileCenter(Cell cell)
+{
+    return TileToScreen(cell) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+}
+
+// Go from 2d to 1d (necessary for path finding data structures)
+size_t Index(Cell cell)
+{
+    return cell.row * TILE_COUNT + cell.col;
+}
+
+// Go from 1d to 2d
+//Cell From(size_t index)
+//{
+//    return { index % TILE_COUNT, index / TILE_COUNT };
+//}
+
+float Cost(TileType type)
+{
+    static array<float, COUNT> costs
+    {
+        0.0f,   // AIR
+        10.0f,  // GRASS
+        25.0f,  // WATER
+        50.0f,  // MUD
+        100.0f, // MOUNTAIN
+    };
+
+    return costs[type];
+}
+
+// Returns all adjacent cells to the passed-in cell (up, down, left, right & diagonals)
+vector<Cell> Neighbours(Cell cell)
+{
+    vector<Cell> neighbours;
+    for (int row = -1; row <= 1; row++)
+    {
+        for (int col = -1; col <= 1; col++)
+        {
+            // Don't add the passed-in cell to the list
+            if (row == cell.row && col == cell.col) continue;
+
+            Cell neighbour{ cell.col + col, cell.row + row };
+            if (neighbour.col >= 0 && neighbour.col < TILE_COUNT &&
+                neighbour.row >= 0 && neighbour.row < TILE_COUNT)
+                neighbours.push_back(neighbour);
+        }
+    }
+    return neighbours;
+}
+
+struct Node
+{
+    Node()
+    {
+        Init();
+    }
+
+    Node(Cell cell)
+    {
+        Init(cell);
+    }
+
+    Node(Cell cell, float g, float h)
+    {
+        Init(cell, {}, g, h);
+    }
+
+    Node(Cell cell, Cell parent, float g, float h)
+    {
+        Init(cell, parent, g, h);
+    }
+
+    void Init(Cell cell = {}, Cell parent = {}, float g = 0.0f, float h = 0.0f)
+    {
+        this->cell = cell;
+        this->parent = parent;
+        this->g = g;
+        this->h = h;
+    }
+
+    float F() { return g + h; }
+
+    float g;
+    float h;
+
+    Cell cell;
+    Cell parent;
+};
+
+bool operator==(Cell a, Cell b)
+{
+    return a.row == b.row && a.col == b.col;
+}
+
+bool Compare(Node a, Node b)
+{
+    return a.F() > b.F();
+}
+
+vector<Cell> FindPath(Cell start, Cell end, Map map, bool manhattan)
+{
+    // 1:1 mapping of graph nodes to tile map
+    const int nodeCount = TILE_COUNT * TILE_COUNT;
+    vector<Node> tileNodes(nodeCount);
+    vector<bool> closedList(nodeCount, false);
+    priority_queue<Node, vector<Node>, decltype(&Compare)> openList(Compare);
+    tileNodes[Index(start)].parent = start;
+    openList.push(start);
+
+    // Loop until we've reached the goal, or explored every tile
+    while (!openList.empty())
+    {
+        const Cell currentCell = openList.top().cell;
+
+        // Stop exploring once we've found the goal
+        if (currentCell == end)
+            break;
+
+        // Otherwise, add current cell to closed list and update g & h values of its neighbours
+        openList.pop();
+        closedList[Index(currentCell)] = true;
+
+        float gNew, hNew;
+        for (const Cell& neighbour : Neighbours(currentCell))
+        {
+            const size_t neighbourIndex = Index(neighbour);
+
+            // Skip if already explored
+            if (closedList[neighbourIndex]) continue;
+
+            // Calculate scores
+            gNew = manhattan ? Manhattan(currentCell, neighbour) : Euclidean(currentCell, neighbour);
+            if (!manhattan)
+            {
+                // Calculate diagonal g-score
+                const float diagonalG = tileNodes[Index(currentCell)].g + sqrtf(2.0f) * Cost((TileType)map[neighbour.row][neighbour.col]);
+                if (diagonalG < gNew)
+                    gNew = diagonalG;
+            }
+            hNew = manhattan ? Manhattan(neighbour, end) : Euclidean(neighbour, end);
+            hNew += Cost((TileType)map[neighbour.row][neighbour.col]);
+
+            // Append if unvisited or best score
+            if (tileNodes[neighbourIndex].F() <= FLT_EPSILON /*unexplored*/ ||
+                gNew + hNew < tileNodes[neighbourIndex].F() /*better score*/)
+            {
+                openList.push({ neighbour, gNew, hNew });
+                tileNodes[neighbourIndex] = { neighbour, currentCell, gNew, hNew };
+            }
+        }
+    }
+
+    vector<Cell> path;
+    Cell currentCell = end;
+    size_t currentIndex = Index(currentCell);
+
+    while (!(tileNodes[currentIndex].parent == currentCell))
+    {
+        path.push_back(currentCell);
+        currentCell = tileNodes[currentIndex].parent;
+        currentIndex = Index(currentCell);
+    }
+    path.push_back(start);
+    reverse(path.begin(), path.end());
+
+    return path;
+}
+
+
+void DrawTile(Cell cell, Color color)
+{
+    DrawRectangle(cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, color);
+}
+
+void DrawTile(Cell cell, TileType type)
+{
+    Color color = WHITE;
+    switch (type)
+    {
+    case MOUNTAIN:
+        color = DARKGRAY;
+        break;
+
+    case MUD:
+        color = BROWN;
+        break;
+
+    case WATER:
+        color = BLUE;
+        color.b = 180;
+        break;
+
+    case GRASS:
+        color = GREEN;
+        color.g = 180;
+        break;
+    }
+    DrawTile(cell, color);
+}
+
+void DrawTile(Cell cell, Map map)
+{
+    DrawTile(cell, (TileType)map[cell.row][cell.col]);
+}
+
+// Late task 1:
+// Consider building a persistent grid to handle g scores of diagonals when using euclidean distance if you want full marks on LE4 late submission.
+struct Tile
+{
+    // Store neighbors (4 directions + diagonals)
+    array<Tile*, 8> neighbors;
+    float g;
+    float h;
+    float diagonalG; // New member for diagonal g-scores
+};
+
+
+int main(void)
+{
+    Map map
+    {
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 0, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 0, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 4, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 0, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 0, 0, 4, 0, 0, 0, 0, 0 },
+        array<size_t, TILE_COUNT>{ 0, 0, 0, 0, 4, 4, 0, 0, 0, 0 },
+    };
+
+    Cell start{ 1, 1 };
+    Cell goal{ 8, 8 };
+    float dist1 = Manhattan(start, goal);
+    float dist2 = Euclidean(start, goal);
+
+    bool manhattan = true;
+    vector<Cell> path = FindPath(start, goal, map, manhattan);
+
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
+    rlImGuiSetup(true);
     SetTargetFPS(60);
-
-    Texture2D Background = LoadTexture("../game/assets/textures/Coral reef.png");
-    Texture2D fishTexture = LoadTexture("../game/assets/textures/Fish.png");
-    vector<Fish> fish;
-    fish.push_back(Fish({ 100, 200 }, fishTexture, 100, 90, 250.0f, 300.0f));
-  
-    fish.push_back(Fish({ 200, 300 }, fishTexture, 100, 90, 300.0f, 400.0f));
-    fish.push_back(Fish({ 300, 400 }, fishTexture, 100, 90, 350.0f, 500.0f));
-    
-    fish.push_back(Fish({ 400, 500 }, fishTexture, 100, 90, 400.0f, 350.0f));
-    fish.push_back(Fish({ 500, 600 }, fishTexture, 100, 90, 300.0f, 400.0f));
-   
-    fish.push_back(Fish({ 600, 700 }, fishTexture, 100, 90, 350.0f, 450.0f));
-    fish.push_back(Fish({ 700, 800 }, fishTexture, 100, 90, 275.0f, 250.0f));
-
-    fish.push_back(Fish({ 800, 900 }, fishTexture, 100, 90, 400.0f, 300.0f));
-    fish.push_back(Fish({ 900, 1000 }, fishTexture, 100, 90, 450.0f, 350.0f));
-    fish.push_back(Fish({ 1000, 1100 }, fishTexture, 100, 90, 500.0f, 400.0f));
-
-    vector<Obstacle> obstacles;
-    vector<Food> foods;
-
-    Vector2 targetPosition{};
-    bool Seek = false;
-    bool Flee = false;
-    bool Arrival = false;
-    bool Avoid = false;
-
 
     while (!WindowShouldClose())
     {
+        // TODO (bonus) write code to move an object along the path using interpolation
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        float deltaTime = GetFrameTime();
 
-        if (IsKeyPressed(KEY_SPACE))
+        for (int row = 0; row < TILE_COUNT; row++)
         {
-            fish.clear();
-            fish.push_back(Fish({ 100, 200 }, fishTexture, 100, 90, 250.0f, 300.0f));
-           
-            fish.push_back(Fish({ 200, 300 }, fishTexture, 100, 90, 300.0f, 400.0f));
-            fish.push_back(Fish({ 300, 400 }, fishTexture, 100, 90, 350.0f, 500.0f));
-            
-            fish.push_back(Fish({ 400, 500 }, fishTexture, 100, 90, 400.0f, 350.0f));
-            fish.push_back(Fish({ 500, 600 }, fishTexture, 100, 90, 300.0f, 400.0f));
-           
-            fish.push_back(Fish({ 600, 700 }, fishTexture, 100, 90, 350.0f, 450.0f));
-            fish.push_back(Fish({ 700, 800 }, fishTexture, 100, 90, 275.0f, 250.0f));
-
-            fish.push_back(Fish({ 800, 900 }, fishTexture, 100, 90, 400.0f, 300.0f));
-            fish.push_back(Fish({ 900, 1000 }, fishTexture, 100, 90, 450.0f, 350.0f));
-            fish.push_back(Fish({ 1000, 1100 }, fishTexture, 100, 90, 500.0f, 400.0f));
-
-
-            Seek = false;
-            Flee = false;
-            Arrival = false;
-            Avoid = false;
-        }
-        if (IsKeyPressed(KEY_ONE))
-        {
-            Seek = true;
-            Flee = false;
-            Arrival = false;
-            Avoid = false;          
-        }
-        else if (IsKeyPressed(KEY_TWO))
-        {
-            Seek = false;
-            Flee = true;
-            Arrival = false;
-            Avoid = false;
-            
-        }
-        else if (IsKeyPressed(KEY_THREE))
-        {
-            Seek = false;
-            Flee = false;
-            Arrival = true;
-            Avoid = false;
-        }
-        else if (IsKeyPressed(KEY_FOUR))
-        {
-            Seek = false;
-            Flee = false;
-            Arrival = false;
-            Avoid = true;
-        }
-
-        if (IsMouseButtonUp(MOUSE_LEFT_BUTTON))
-        {
-            if (Seek)
+            for (int col = 0; col < TILE_COUNT; col++)
             {
-                targetPosition = GetMousePosition();
+                // We know g score is always 1 when using manhattan distance so just use that for g
+                Cell cell{ col, row };
+                float g = 1.0f;
+                float h = Manhattan(cell, goal);
+
+                // Late task 2:
+                // Upgrade this by switching between manhattan and euclidean if you have yet to hand in lab exercise 4
+                // Also consider building a static grid representation where each tile stores its neighbours
+                DrawTile(cell, map);
+                Vector2 texPos = TileCenter(cell);
+                DrawText(TextFormat("F: %f", g + h), texPos.x, texPos.y, 10, MAROON);
             }
         }
 
-        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+        Vector2 cursor = GetMousePosition();
+        Cell cursorTile = ScreenToTile(cursor);
+
+        for (const Cell& cell : path)
+            DrawTile(cell, RED);
+
+        DrawTile(cursorTile, GRAY);
+        DrawTile(start, DARKBLUE);
+        DrawTile(goal, SKYBLUE);
+
+        // We can see quantization & localization in-action if we convert the cursor to tile coordinates
+        //DrawText(TextFormat("row %i, col %i", cursorTile.row, cursorTile.col), cursor.x, cursor.y, 20, DARKGRAY);
+
+       // ...
+
+        rlImGuiBegin();
+
+        bool startChanged = false;
+        bool goalChanged = false;
+
+        if (ImGui::Button("Find path"))
         {
-            if (Avoid)
-            {
-                Obstacle obstacle;
-                obstacle.position = GetMousePosition();
-                obstacle.radius = 10;
-                obstacles.push_back(obstacle);
-            }
+            path = FindPath(start, goal, map, true);
         }
 
-        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
-        {
-            if (Arrival)
-            {
-                Food food;
-                food.position = GetMousePosition();
-                food.radius = 10;
-                foods.push_back(food);
-            }
-        }
-        for (Fish& fish : fish)
-        {
-            if (Seek)
-            {
-                Vector2 desiredVel = targetPosition - fish.rigidbody.position;
-                desiredVel = Normalize(desiredVel) * fish.maxSpeed;
-                Vector2 steering = desiredVel - fish.rigidbody.velocity;
-                fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
-            }
-            if (Flee)
-            {
-                Vector2 predatorPosition = GetMousePosition();
-                Vector2 desiredVel = fish.rigidbody.position - predatorPosition;
-                desiredVel = Normalize(desiredVel) * fish.maxSpeed;
-                Vector2 steering = desiredVel - fish.rigidbody.velocity;
-                fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
-             
-            }
-            if (Arrival)
-            {
-                for (const Food& food : foods)
-                {
-                    Vector2 desiredVel = food.position - fish.rigidbody.position;
-                    float distance = Length(desiredVel);
-                    float slowRadius = 100.0f;
-                    float arriveRadius = 25.0f;
+        startChanged = ImGui::SliderInt2("Start", &start.col, 0, TILE_COUNT - 1);
+        goalChanged = ImGui::SliderInt2("Goal", &goal.col, 0, TILE_COUNT - 1);
+        ImGui::Checkbox("Toggle Manhattan", &manhattan);
 
-                    if (distance > slowRadius)
-                    {
-                        desiredVel = Normalize(desiredVel) * fish.maxSpeed;
-                    }
-                    else if (distance > arriveRadius)
-                    {
-                        float t = distance / slowRadius;
-                        desiredVel = Normalize(desiredVel) * fish.maxSpeed * t;
-                    }
-                    else
-                    {
-                        desiredVel = { 0, 0 };
-                    }
-
-                    Vector2 steering = desiredVel - fish.rigidbody.velocity;
-                    fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
-                    for (auto it = foods.begin(); it != foods.end(); ++it)
-                    {
-                        const Food& food = *it;
-                        if (CheckCollisionCircleRec(fish.rigidbody.position, fish.width * 0.5f, { food.position.x - food.radius, food.position.y - food.radius, food.radius * 2, food.radius * 2 }))
-                        {
-                          foods.erase(it);
-                          break;
-                        }
-                    }
-                }
-            }
-            if (Avoid)
-            {
-             targetPosition = GetMousePosition();
-              Vector2 desiredVel = targetPosition - fish.rigidbody.position;
-              desiredVel = Normalize(desiredVel) * fish.maxSpeed;
-              Vector2 steering = desiredVel - fish.rigidbody.velocity;
-              fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
-
-                for (const Obstacle& obstacle : obstacles)
-                {
-                    Vector2 desiredVel = fish.rigidbody.position - obstacle.position;
-                    float distance = Length(desiredVel);
-                    float avoidRadius = 50.0f;
-
-                    if (distance < avoidRadius)
-                    {
-                        desiredVel = Normalize(desiredVel) * fish.maxSpeed;
-                        Vector2 steering = desiredVel - fish.rigidbody.velocity;
-                        fish.rigidbody.acceleration = fish.rigidbody.acceleration + steering;
-                    }
-                }
-            }
-            fish.UpdateRigidBody(deltaTime);
-            if (fish.rigidbody.position.x > SCREEN_WIDTH)
-                fish.rigidbody.position.x = 0;
-            else if (fish.rigidbody.position.x < 0)
-                fish.rigidbody.position.x = SCREEN_WIDTH;
-
-            if (fish.rigidbody.position.y > SCREEN_HEIGHT)
-                fish.rigidbody.position.y = 0;
-            else if (fish.rigidbody.position.y < 0)
-                fish.rigidbody.position.y = SCREEN_HEIGHT;
-        }
-        DrawTexture(Background, 0, 0, RAYWHITE);
-        for (const Fish& fish : fish)
+        if (startChanged || goalChanged)
         {
-            fish.Draw();
+            path = FindPath(start, goal, map, true);
         }
-        if (Seek || Avoid)
-        {
-            DrawCircle(targetPosition.x, targetPosition.y, 10, ORANGE);
-        }
-        if (Avoid)
-        {
-            for (const Obstacle& obstacle : obstacles)
-            {
-                DrawCircle(obstacle.position.x, obstacle.position.y, obstacle.radius, YELLOW);
-            }
-        }
-        if (Arrival)
-        {
-            for (const Food& food : foods)
-            {
-                DrawCircle(food.position.x, food.position.y, food.radius, GREEN);
-            }
-        }
-        DrawText("Press 1 for Seek", 10, 10, 20, WHITE);
-        DrawText("Press 2 for Flee", 200, 10, 20, WHITE);
-        DrawText("Press 3 for Arrive", 400, 10, 20, WHITE);
-        DrawText("Press 4 for Avoid", 600, 10, 20, WHITE);
-        DrawText("Press SPACE to reset", 800, 10, 20, WHITE);
 
+        rlImGuiEnd();
 
         EndDrawing();
+        // ...
+
     }
-    UnloadTexture(Background);
-    UnloadTexture(fishTexture);
+
+    rlImGuiShutdown();
     CloseWindow();
     return 0;
 }
