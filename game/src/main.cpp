@@ -38,17 +38,13 @@ float Manhattan(Cell a, Cell b)
 float Euclidean(Cell a, Cell b)
 {
     return sqrtf(powf(b.col - a.col, 2.0f) + powf(b.row - a.row, 2.0f));
-    //return sqrtf((b.col - a.col) * (b.col - a.col) + (b.row - a.row) * (b.row - a.row));
-    // Identical to the above implementation
 }
 
-// From game world to graph world "Quantization"
 Cell ScreenToTile(Vector2 position)
 {
     return { int(position.x / TILE_WIDTH), int(position.y / TILE_HEIGHT) };
 }
 
-// From graph world to game world "Localization"
 Vector2 TileToScreen(Cell cell)
 {
     return { cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT };
@@ -59,17 +55,11 @@ Vector2 TileCenter(Cell cell)
     return TileToScreen(cell) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 }
 
-// Go from 2d to 1d (necessary for path finding data structures)
 size_t Index(Cell cell)
 {
     return cell.row * TILE_COUNT + cell.col;
 }
 
-// Go from 1d to 2d
-//Cell From(size_t index)
-//{
-//    return { index % TILE_COUNT, index / TILE_COUNT };
-//}
 
 float Cost(TileType type)
 {
@@ -85,7 +75,6 @@ float Cost(TileType type)
     return costs[type];
 }
 
-// Returns all adjacent cells to the passed-in cell (up, down, left, right & diagonals)
 vector<Cell> Neighbours(Cell cell)
 {
     vector<Cell> neighbours;
@@ -226,6 +215,7 @@ vector<Cell> FindPath(Cell start, Cell end, Map map, bool manhattan)
 void DrawTile(Cell cell, Color color)
 {
     DrawRectangle(cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, color);
+
 }
 
 void DrawTile(Cell cell, TileType type)
@@ -401,11 +391,11 @@ int main(void)
             {
                 Cell cell{ col, row };
                 float g = manhattan ? Manhattan(cell, goal) : Euclidean(cell, goal);
-                float h = Manhattan(cell, goal);
-
+                float h = manhattan ? Manhattan(cell, goal) : Euclidean(cell, goal);
                 DrawTile(cell, map);
                 Vector2 texPos = TileCenter(cell);
                 DrawText(TextFormat("F: %f", g + h), texPos.x, texPos.y, 10, MAROON);
+                DrawText(TextFormat("H: %.1f", h), cell.col * TILE_WIDTH, cell.row * TILE_HEIGHT + 15, 10, DARKBLUE);
             }
         }
 
