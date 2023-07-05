@@ -186,8 +186,15 @@ vector<Cell> FindPath(Cell start, Cell end, Map map, bool manhattan)
             if (closedList[neighbourIndex]) continue;
 
             // Calculate scores
-            gNew = manhattan ? Manhattan(currentCell, neighbour) : Euclidean(currentCell, neighbour);   // Distance from current to adjacent
-            hNew = manhattan ? Manhattan(neighbour, end) : Euclidean(neighbour, end);                   // Distance from adjacent to goal
+            gNew = manhattan ? Manhattan(currentCell, neighbour) : Euclidean(currentCell, neighbour);
+            if (!manhattan)
+            {
+                // Calculate diagonal g-score
+                const float diagonalG = tileNodes[Index(currentCell)].g + sqrtf(2.0f) * Cost((TileType)map[neighbour.row][neighbour.col]);
+                if (diagonalG < gNew)
+                    gNew = diagonalG;
+            }
+            hNew = manhattan ? Manhattan(neighbour, end) : Euclidean(neighbour, end);
             hNew += Cost((TileType)map[neighbour.row][neighbour.col]);
 
             // Append if unvisited or best score
@@ -251,6 +258,14 @@ void DrawTile(Cell cell, Map map)
 {
     DrawTile(cell, (TileType)map[cell.row][cell.col]);
 }
+struct Tile
+{
+    // Store neighbors (4 directions + diagonals)
+    array<Tile*, 8> neighbors;
+    float g;
+    float h;
+    float diagonalG; // New member for diagonal g-scores
+};
 
 int main(void)
 {
@@ -384,7 +399,13 @@ int main(void)
         {
             for (int col = 0; col < TILE_COUNT; col++)
             {
-                DrawTile({ row, col }, map);
+                Cell cell{ col, row };
+                float g = manhattan ? Manhattan(cell, goal) : Euclidean(cell, goal);
+                float h = Manhattan(cell, goal);
+
+                DrawTile(cell, map);
+                Vector2 texPos = TileCenter(cell);
+                DrawText(TextFormat("F: %f", g + h), texPos.x, texPos.y, 10, MAROON);
             }
         }
 
@@ -401,7 +422,9 @@ int main(void)
         DrawLineV(currentPosition, nextCenter, BLACK);
 
         rlImGuiBegin();
-
+        bool startChanged = false;
+        bool goalChanged = false;
+        bool manhattanChanged = false;
         // Task 2: Make a checkbox that toggles between interpolation vs steering.
         // You'll want to advance index based on proximity to tile centre instead of time.
         if (ImGui::Button("Find path"))
@@ -409,9 +432,14 @@ int main(void)
             path = FindPath(start, goal, map, true);
         }
 
-        ImGui::SliderInt2("Start", &start.col, 0, TILE_COUNT - 1);
-        ImGui::SliderInt2("Goal", &goal.col, 0, TILE_COUNT - 1);
+        startChanged = ImGui::SliderInt2("Start", &start.col, 0, TILE_COUNT - 1);
+        goalChanged = ImGui::SliderInt2("Goal", &goal.col, 0, TILE_COUNT - 1);
         ImGui::Checkbox("Toggle Manhattan", &manhattan);
+
+        if (startChanged || goalChanged || manhattanChanged)
+        {
+            path = FindPath(start, goal, map, manhattan);
+        }
         ImGui::Checkbox("Interpolation", &useInterpolation);
         ImGui::Checkbox("Steering", &useSteering);
 
