@@ -1,5 +1,6 @@
 #pragma once
 #include <corecrt_math.h>
+#include <cstdlib>
 
 //----------------------------------------------------------------------------------
 // Defines and Macros
@@ -94,6 +95,12 @@ typedef struct float16 {
 //----------------------------------------------------------------------------------
 // Module Functions Definition - Utils math
 //----------------------------------------------------------------------------------
+
+// Random value between min and max (can be negative)
+RMAPI inline float Random(float min, float max)
+{
+    return min + (rand() / ((float)RAND_MAX / (max - min)));
+}
 
 // Clamp float value
 RMAPI float Clamp(float value, float min, float max)
@@ -230,6 +237,13 @@ RMAPI float Dot(Vector2 v1, Vector2 v2)
     return result;
 }
 
+RMAPI float Cross(Vector2 v1, Vector2 v2)
+{
+    float result = v1.x * v2.y - v1.y * v2.x;
+
+    return result;
+}
+
 // Calculate distance between two vectors
 RMAPI float Distance(Vector2 v1, Vector2 v2)
 {
@@ -246,6 +260,15 @@ RMAPI float DistanceSqr(Vector2 v1, Vector2 v2)
     return result;
 }
 
+// -1 if below zero, +1 if above zero
+RMAPI float Sign(float value)
+{
+    float result = (value < 0.0f) ? -1.0f : 1.0f;
+
+    return result;
+}
+
+// Convert angle to direction
 RMAPI Vector2 Direction(float angle)
 {
     Vector2 result = { cosf(angle), sinf(angle) };
@@ -253,19 +276,16 @@ RMAPI Vector2 Direction(float angle)
     return result;
 }
 
-// Calculate angle between two vectors
-// NOTE: Angle is calculated from origin point (0, 0)
-RMAPI float Angle(Vector2 v1, Vector2 v2)
+// Convert direction to angle
+RMAPI float Angle(Vector2 v)
 {
-    float result = atan2f(v2.y - v1.y, v2.x - v1.x);
+    float result = atan2f(v.y, v.x);
 
     return result;
 }
 
-// Calculate angle defined by a two vectors line
-// NOTE: Parameters need to be normalized
-// Current implementation should be aligned with glm::angle
-RMAPI float LineAngle(Vector2 start, Vector2 end)
+// Unsigned angle between two directions. Range of [0, 180]
+RMAPI float UnsignedAngle(Vector2 start, Vector2 end)
 {
     float result = 0.0f;
 
@@ -277,6 +297,14 @@ RMAPI float LineAngle(Vector2 start, Vector2 end)
     result = acosf(dotClamp);
 
     return result;
+}
+
+// Signed angle between two directions. Range = [-180, 180]
+RMAPI float SignedAngle(Vector2 from, Vector2 to)
+{
+    float sign = Sign(from.x * to.y - from.y * to.x);
+    float angle = UnsignedAngle(from, to);
+    return sign * angle;
 }
 
 // Scale vector (multiply by value)
@@ -295,7 +323,7 @@ RMAPI Vector2 Project(Vector2 v1, Vector2 v2)
 }
 
 // Returns the point on line AB nearest to point P
-RMAPI Vector2 NearestPoint(Vector2 A, Vector2 B, Vector2 P)
+RMAPI Vector2 ProjectPointLine(Vector2 A, Vector2 B, Vector2 P)
 {
     Vector2 AB = Subtract(B, A);
     float t = Dot(Subtract(P, A), AB) / Dot(AB, AB);
@@ -412,6 +440,13 @@ RMAPI Vector2 MoveTowards(Vector2 v, Vector2 target, float maxDistance)
     result.y = v.y + dy / dist * maxDistance;
 
     return result;
+}
+
+// Rotate max radians towards the target
+RMAPI Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
+{
+    float deltaRadians = UnsignedAngle(from, to);
+    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
 }
 
 // Invert the given vector
@@ -633,7 +668,7 @@ RMAPI Vector3 Project(Vector3 v1, Vector3 v2)
 }
 
 // Returns the point on line AB nearest to point P
-RMAPI Vector3 NearestPoint(Vector3 A, Vector3 B, Vector3 P)
+RMAPI Vector3 ProjectPointLine(Vector3 A, Vector3 B, Vector3 P)
 {
     Vector3 AB = Subtract(B, A);
     float t = Dot(Subtract(P, A), AB) / Dot(AB, AB);
