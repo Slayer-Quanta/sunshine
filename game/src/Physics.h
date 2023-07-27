@@ -1,40 +1,62 @@
 #pragma once
-#include "Math.h"
+#include "Collision.h"
 
 struct Rigidbody
 {
-    Vector2 velocity{ 0.0f, 0.0f };
-    Vector2 acceleration{ 0.0f, 0.0f };
+    Vector2 pos{};
+    Vector2 vel{};
+    Vector2 acc{};
+
+    Vector2 dir{ 1.0f, 0.0f };  // right
+    float angularSpeed = 0.0f;  // radians
 };
 
-// v2 = v1 + a(t)
-// p2 = p1 + v2(t) + 0.5a(t^2)
-Vector2 Integrate(const Vector2& pos, Rigidbody& rb, float dt)
+inline void Update(Rigidbody& rb, float dt)
 {
-    rb.velocity = rb.velocity + rb.acceleration * dt;
-    return pos + rb.velocity * dt + rb.acceleration * dt * dt * 0.5f;
+    rb.vel = rb.vel + rb.acc * dt;
+    rb.pos = rb.pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
+    rb.dir = RotateTowards(rb.dir, Normalize(rb.vel), rb.angularSpeed * dt);
 }
 
-// vf^2 = vi^2 + 2a(d)
-// 0^2 = vi^2 + 2a(d)
-// -vi^2 / 2d = a
-Vector2 Decelerate(
-    const Vector2& targetPosition,
-    const Vector2& seekerPosition,
-    const Vector2& seekerVelocity)
+inline Vector2 Seek(Vector2 target, Vector2 seekerPosition, Vector2 seekerVelocity, float speed)
 {
-    float d = Length(targetPosition - seekerPosition);
-    float a = Dot(seekerVelocity, seekerVelocity) / (d * 2.0f);
-
-    return Negate(Normalize(seekerVelocity)) * a;
+    return Normalize(target - seekerPosition) * speed - seekerVelocity;
 }
 
-// Accelerate towards target
-Vector2 Seek(
-    const Vector2& targetPosition,
-    const Vector2& seekerPosition,
-    const Vector2& seekerVelocity, float maxSpeed)
+inline Vector2 Flee(Vector2 target, Vector2 seekerPosition, Vector2 seekerVelocity, float speed)
 {
-    Vector2 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
-    return desiredVelocity - seekerVelocity;
+    return Normalize(seekerPosition - target) * speed - seekerVelocity;
+}
+
+inline Vector2 Avoid(const Rigidbody& rb, float dt, const Circles& obstacles, const Probes& probes)
+{
+    // Steer away from the obstacle (right or left depending on sign of probe angle)
+    auto avoid = [&rb](float probeAngle, float dt) -> Vector2
+    {
+        Vector2 linearDirection = Normalize(rb.vel);
+        float linearSpeed = Length(rb.vel);
+        float avoidSign = probeAngle >= 0.0f ? -1.0f : 1.0f;
+        Vector2 vf = Rotate(linearDirection, rb.angularSpeed * avoidSign * dt) * linearSpeed;
+        return (vf - rb.vel) / dt;
+    };
+
+    auto probeEnd = [&rb](const Probe& probe) -> Vector2
+    {
+        return rb.pos + Rotate(Normalize(rb.vel), probe.angle * DEG2RAD) * probe.length;
+    };
+
+    Points probeEnds(probes.size());
+    for (size_t i = 0; i < probes.size(); i++)
+        probeEnds[i] = probeEnd(probes[i]);
+
+    // Avoid first detected obstacle (otherwise, we risk equilibrium of conflicting probes each detect obstacles)
+    for (size_t i = 0; i < probes.size(); i++)
+    {
+        for (const Circle& obstacle : obstacles)
+        {
+            if (LineCircle(rb.pos, probeEnds[i], obstacle.position, obstacle.radius))
+                return avoid(probes[i].angle, dt);
+        }
+    }
+    return {};
 }
