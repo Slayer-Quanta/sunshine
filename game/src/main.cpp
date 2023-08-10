@@ -1,8 +1,11 @@
 #include "rlImGui.h"
-#include "Physics.h"
+#include "Game.h"
+#include <iostream>
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 using namespace std;
+
+void OnGui(Circles& obstacles);
 
 int main(void)
 {
@@ -10,62 +13,111 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
-    Vector2 targetPosition{ SCREEN_WIDTH * 0.75f, SCREEN_HEIGHT * 0.75f };
-    float targetRadius = 20.0f;
-    float targetViewDistance = 1000.0f;
+    // Create a world such that there will always be at least 1 cover point and 1 point of visibility!
+    World world;
+    Load(world.obstacles);
+    world.waypoints = {
+        { SCREEN_WIDTH * 0.25f, SCREEN_HEIGHT * 0.25f },
+        { SCREEN_WIDTH * 0.75f, SCREEN_HEIGHT * 0.25f },
+        { SCREEN_WIDTH * 0.75f, SCREEN_HEIGHT * 0.75f },
+        { SCREEN_WIDTH * 0.25f, SCREEN_HEIGHT * 0.75f },
+    };
 
-    vector<Circle> obstacles(5);
-    for (Circle& obstacle : obstacles)
-    {
-        float maxRadius = 50.0f;
-        obstacle.position = { Random(maxRadius, SCREEN_WIDTH - maxRadius), Random(maxRadius, SCREEN_HEIGHT - maxRadius) };
-        obstacle.radius = Random(5.0f, maxRadius);
-    }
+    Player player;
+    Enemy enemy(world);
+    enemy.pos = { SCREEN_WIDTH * 0.1f, SCREEN_HEIGHT * 0.1f };
+    player.pos = { SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.9f };
+    enemy.angularSpeed = 100.0f * DEG2RAD;
+    player.angularSpeed = 250.0f * DEG2RAD;
 
-    Probes probes(4);
-    probes[0].angle =  30.0f;
-    probes[1].angle =  15.0f;
-    probes[2].angle = -15.0f;
-    probes[3].angle = -30.0f;
-    probes[0].length = probes[3].length = 100.0f;
-    probes[1].length = probes[2].length = 250.0f;
+    // *Build decision tree for lab 8 here*
 
-    Rigidbody rb;
-    rb.pos = { SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f };
-    rb.angularSpeed = 100.0f * DEG2RAD;
-    float seekerRadius = 20.0f;
-
+    bool showGui = false;
     while (!WindowShouldClose())
     {
+        if (IsKeyPressed(KEY_GRAVE))
+            showGui = !showGui;
+
         const float dt = GetFrameTime();
-        rb.acc = Seek(GetMousePosition(), rb.pos, rb.vel, 500.0f);
-        rb.acc = rb.acc + Avoid(rb, dt, obstacles, probes);
-        Update(rb, dt);
-        bool seekerVisible = IsVisible(rb.pos, targetViewDistance, targetPosition, targetRadius, obstacles);
+        player.Update(dt, world);
+        enemy.Update(dt);
+
+        for (Bullet& bullet : world.bullets)
+        {
+            Update(bullet, dt);
+        }
+
+        world.bullets.erase(
+            remove_if(world.bullets.begin(), world.bullets.end(),
+                [&player, &enemy, &world](const Bullet& bullet)
+                {
+                    // A4 TODO -- test enemy bullets against player (damage and remove if colliding)
+                    // A4 TODO -- test player bullets against enemy (damage and remove if colliding)
+                    // A4 TODO -- test bullet against all obstacles (remove if colliding)
+                    // A4 TODO -- test bullet against screen rectangle (remove if not colliding)
+                    return false;   // <-- removes nothing (returning true removes the current bullet)
+                }),
+            world.bullets.end());
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        DrawCircleV(targetPosition, seekerRadius, seekerVisible ? GREEN : RED);
-        DrawLineV(targetPosition, targetPosition + Normalize(rb.pos - targetPosition) * targetViewDistance, seekerVisible ? GREEN : RED);
+        DrawCircleV(player.pos, player.Radius(), BLUE);
+        DrawLineV(player.pos, player.pos + player.dir * 100.0f, BLACK);
+        DrawCircleV(enemy.pos, enemy.Radius(), RED);
+        DrawLineV(enemy.pos, enemy.pos + enemy.dir * 100.0f, BLACK);
 
-        DrawCircleV(rb.pos, seekerRadius, BLUE);
-        DrawLineV(rb.pos, rb.pos + rb.dir * 250.0f, DARKBLUE);
-
-        for (const Probe& probe : probes)
-            DrawLineV(rb.pos, rb.pos + Rotate(Normalize(rb.vel), probe.angle * DEG2RAD) * probe.length, PURPLE);
-
-        for (const Circle& obstacle : obstacles)
+        for (const Circle& obstacle : world.obstacles)
             DrawCircleV(obstacle.position, obstacle.radius, GRAY);
 
-        rlImGuiBegin();
-        ImGui::SliderFloat("View Distance", &targetViewDistance, 10.0f, 1250.0f);
-        rlImGuiEnd();
+        for (const Vector2& point : world.waypoints)
+            DrawCircleV(point, 20.0f, DARKBLUE);
 
+        for (const Bullet& bullet : world.bullets)
+            DrawCircleV(bullet.pos, bullet.Radius(), RED);
+
+        rlImGuiBegin();
+        if (showGui)
+            OnGui(world.obstacles);
+        rlImGuiEnd();
         EndDrawing();
     }
 
     rlImGuiShutdown();
     CloseWindow();
     return 0;
+}
+
+void OnGui(Circles& obstacles)
+{
+    if (ImGui::Button("Save Obstacles"))
+    {
+        Save(obstacles);
+    }
+
+    if (ImGui::Button("Load Obstacles"))
+    {
+        obstacles.clear();
+        Load(obstacles);
+    }
+
+    if (ImGui::Button("Add Obstacle"))
+    {
+        Circle obstacle;
+        obstacle.position = { 0.0f, 0.0f };
+        obstacle.radius = 100.0f;
+        obstacles.push_back(obstacle);
+    }
+
+    if (ImGui::Button("Remove Obstacle"))
+    {
+        obstacles.pop_back();
+    }
+
+    char obstacleLabel[64];
+    for (size_t i = 0; i < obstacles.size(); i++)
+    {
+        sprintf(obstacleLabel, "Obstacle %zu", i);
+        ImGui::SliderFloat3(obstacleLabel, (float*)&obstacles[i], 0.0f, SCREEN_WIDTH);
+    }
 }

@@ -1,17 +1,12 @@
 #pragma once
 #include "Math.h"
 #include <vector>
+#include <fstream>
 #include <algorithm>
-
-struct Line
-{
-    Vector2 start;
-    Vector2 end;
-};
 
 struct Circle
 {
-    Vector2 position;
+    Vector2 position{};
     float radius;
 };
 
@@ -23,7 +18,6 @@ struct Probe
 };
 
 using Points = std::vector<Vector2>;
-using Lines = std::vector<Line>;
 using Circles = std::vector<Circle>;
 using Probes = std::vector<Probe>;
 
@@ -31,7 +25,7 @@ using Probes = std::vector<Probe>;
 inline void DistanceSort(const Vector2& position, Points& points)
 {
     std::sort(points.begin(), points.end(),
-        [position](const Vector2& lhs, const Vector2& rhs)
+        [position](const Vector2& lhs, const Vector2& rhs) -> bool
         {
             return DistanceSqr(position, lhs) < DistanceSqr(position, rhs);
         }
@@ -42,7 +36,7 @@ inline void DistanceSort(const Vector2& position, Points& points)
 inline void DistanceSort(const Vector2& position, Circles& circles)
 {
     std::sort(circles.begin(), circles.end(),
-        [position](const Circle& lhs, const Circle& rhs)
+        [position](const Circle& lhs, const Circle& rhs) -> bool
         {
             return DistanceSqr(position, lhs.position) < DistanceSqr(position, rhs.position);
         }
@@ -61,3 +55,28 @@ inline void DistanceSort(const Vector2& position, Circles& circles)
 //        }
 //    );
 //}
+
+inline void Save(const Circles& obstacles, const char* path = "../game/assets/data/obstacles.txt")
+{
+    std::ofstream out(path);
+    for (size_t i = 0; i < obstacles.size(); i++)
+    {
+        const Circle& obstacle = obstacles[i];
+        if (i == obstacles.size() - 1)
+            out << obstacle.position.x << ' ' << obstacle.position.y << ' ' << obstacle.radius;
+        else
+            out << obstacle.position.x << ' ' << obstacle.position.y << ' ' << obstacle.radius << std::endl;
+    }
+    out.close();
+}
+
+inline void Load(Circles& obstacles, const char* path = "../game/assets/data/obstacles.txt")
+{
+    std::ifstream in(path);
+    while (!in.eof())
+    {
+        Circle obstacle;
+        in >> obstacle.position.x >> obstacle.position.y >> obstacle.radius;
+        obstacles.push_back(obstacle);
+    }
+}
