@@ -235,21 +235,36 @@ private:
 		}
 
 		// Task 3: Handle patrolling
+		 // Task 3: Handle patrolling
 		if (mState == NEUTRAL)
 		{
-			float distanceToWaypoint = Distance(pos, mWorld.waypoints[mWaypointIndex]);
-
-			if (distanceToWaypoint < mProximity)
+			// Randomly choose patrol direction based on coin toss
+			if (std::rand() % 2 == 0)
 			{
-				if (mPatrolClockwise)
+				mPatrolClockwise = true;
+			}
+			else
+			{
+				mPatrolClockwise = false;
+			}
+
+			// Calculate the index of the nearest waypoint
+			size_t nearestWaypointIndex = 0;
+			float shortestDistance = Distance(pos, mWorld.waypoints[0]);
+
+			for (size_t i = 1; i < mWorld.waypoints.size(); ++i)
+			{
+				float distance = Distance(pos, mWorld.waypoints[i]);
+				if (distance < shortestDistance)
 				{
-					mWaypointIndex = (mWaypointIndex + 1) % mWorld.waypoints.size();
-				}
-				else
-				{
-					mWaypointIndex = (mWaypointIndex - 1 + mWorld.waypoints.size()) % mWorld.waypoints.size();
+					shortestDistance = distance;
+					nearestWaypointIndex = i;
 				}
 			}
+
+			// Set the next waypoint index to the index of the nearest waypoint
+			mWaypointIndex = nearestWaypointIndex;
+
 
 			Vector2 desiredDirection = Normalize(mWorld.waypoints[mWaypointIndex] - pos);
 			Vector2 steeringForce = Seek(mWorld.waypoints[mWaypointIndex], pos, vel, Speed());
