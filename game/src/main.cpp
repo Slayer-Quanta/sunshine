@@ -111,21 +111,59 @@ int main(void)
                 {
                     timer.Reset();
 
+                    // Calculate a spawn position that is outside the AI
+                    Vector2 spawnPosition = rb.pos + Normalize(targetPosition - rb.pos) * seekerRadius;
+
                     Rigidbody bullet;
-                    bullet.pos = rb.pos;
-                    bullet.vel = Normalize(targetPosition - rb.pos) * Random(250.0f, 500.0f);
+                    bullet.pos = spawnPosition;
+                    bullet.vel = Normalize(targetPosition - spawnPosition) * Random(250.0f, 500.0f);
                     bullets.push_back(bullet);
+                    // Remove bullets that are colliding with obstacles or off-screen
+                    bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [&](const Rigidbody& bullet) {
+                        // Check for collision with obstacles
+                        for (const Circle& obstacle : obstacles)
+                        {
+                            Circle bulletCircle = { bullet.pos, 10.0f }; // Create a Circle object for the bullet
+                            if (CircleCircle(bulletCircle, obstacle, nullptr))
+                            {
+                                return true; // Remove the bullet
+                            }
+                        }
+
+                        // Check if bullet is off-screen
+                        if (bullet.pos.x < 0 || bullet.pos.x > SCREEN_WIDTH ||
+                            bullet.pos.y < 0 || bullet.pos.y > SCREEN_HEIGHT)
+                        {
+                            return true; // Remove the bullet
+                        }
+
+                        return false; // Keep the bullet
+                        }), bullets.end());
+
                 }
             }
 
             timer.Tick(dt);
             rb.acc = Seek(targetPosition, rb.pos, rb.vel, seekerSpeed);
+
         }
         else
         {
-            if (CircleCircle({ rb.pos, seekerProximity }, { waypoints[waypointIndex], waypointRadius }))
-                ++waypointIndex %= waypoints.size();
+            // Find the nearest waypoint
+            float nearestDistance = Distance(rb.pos, waypoints[0]);
+            size_t nearestIndex = 0;
 
+            for (size_t i = 1; i < waypoints.size(); i++)
+            {
+                float distance = Distance(rb.pos, waypoints[i]);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestIndex = i;
+                }
+            }
+
+            waypointIndex = nearestIndex; // Set the waypointIndex to the nearest waypoint
             rb.acc = Seek(waypoints[waypointIndex], rb.pos, rb.vel, seekerSpeed);
         }
 
@@ -135,6 +173,7 @@ int main(void)
         bool seekerVisible = IsVisible(rb.pos, targetViewDistance, targetPosition, targetRadius, obstacles);
 
         //*Insert bullet removal here*
+        // Update bullet positions
         for (Rigidbody& bullet : bullets)
             Update(bullet, dt);
 
@@ -182,28 +221,31 @@ int main(void)
             obstacles.push_back(obstacle);
         }
 
+        ImGui::SameLine();
         if (ImGui::Button("Remove Obstacle"))
         {
-            obstacles.pop_back();
+            if (!obstacles.empty())
+            {
+                obstacles.pop_back();
+            }
         }
 
-        char obstacleLabel[64];
         for (size_t i = 0; i < obstacles.size(); i++)
         {
-            // Bonus marks if you can make an editor that is prettier than mine
-            // If you add the ability to click obstacles to selectively modify and delete them, you'll get a very high bonus mark!
-            //sprintf(obstacleLabel, "Obstacle %zu %s", i, "x:");
-            //ImGui::SliderFloat(obstacleLabel, &obstacles[i].position.x, 0.0f, SCREEN_WIDTH);
-            //ImGui::SameLine();
-            //
-            //sprintf(obstacleLabel, "Obstacle %zu %s", i, "y:");
-            //ImGui::SliderFloat(obstacleLabel, &obstacles[i].position.y, 0.0f, SCREEN_HEIGHT);
-            //ImGui::SameLine();
-            //
-            //sprintf(obstacleLabel, "Obstacle %zu %s", i, "r:");
-            //ImGui::SliderFloat(obstacleLabel, &obstacles[i].radius, 0.0f, 250.0f);
+            char obstacleLabel[64];
             sprintf(obstacleLabel, "Obstacle %zu", i);
-            ImGui::SliderFloat3(obstacleLabel, (float*)&obstacles[i], 0.0f, SCREEN_WIDTH);
+
+            if (ImGui::TreeNode(obstacleLabel))
+            {
+                ImGui::SliderFloat2("Position", (float*)&obstacles[i].position, 0.0f, SCREEN_WIDTH);
+                ImGui::SliderFloat("Radius", &obstacles[i].radius, 0.0f, 250.0f);
+                if (ImGui::Button("Remove"))
+                {
+                    obstacles.erase(obstacles.begin() + i);
+                    i--; // Adjust the index after removal
+                }
+                ImGui::TreePop();
+            }
         }
         rlImGuiEnd();
         EndDrawing();
