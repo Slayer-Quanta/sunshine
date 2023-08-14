@@ -108,7 +108,6 @@ int main(void)
                 if (timer.Expired())
                 {
                     timer.Reset();
-
                     // Calculate a spawn position that is outside the AI
                     Vector2 spawnPosition = rb.pos + Normalize(targetPosition - rb.pos) * seekerRadius;
 
