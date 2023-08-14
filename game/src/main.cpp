@@ -89,8 +89,6 @@ int main(void)
     proximityColor.a = 64;
     size_t waypointIndex = 1;
 
-    // Can simplify to if-statements
-    //State state = PATROL;
     Timer timer;
     timer.duration = 0.5f;
 
@@ -118,27 +116,28 @@ int main(void)
                     bullet.pos = spawnPosition;
                     bullet.vel = Normalize(targetPosition - spawnPosition) * Random(250.0f, 500.0f);
                     bullets.push_back(bullet);
-                    // Remove bullets that are colliding with obstacles or off-screen
                     bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [&](const Rigidbody& bullet) {
+                        bool removeBullet = false;
+
                         // Check for collision with obstacles
                         for (const Circle& obstacle : obstacles)
                         {
                             Circle bulletCircle = { bullet.pos, 10.0f }; // Create a Circle object for the bullet
                             if (CircleCircle(bulletCircle, obstacle, nullptr))
                             {
-                                return true; // Remove the bullet
+                                removeBullet = true; 
+                                break; 
                             }
                         }
-
-                        // Check if bullet is off-screen
-                        if (bullet.pos.x < 0 || bullet.pos.x > SCREEN_WIDTH ||
-                            bullet.pos.y < 0 || bullet.pos.y > SCREEN_HEIGHT)
+                        if (!removeBullet && (bullet.pos.x < 0 || bullet.pos.x > SCREEN_WIDTH ||
+                            bullet.pos.y < 0 || bullet.pos.y > SCREEN_HEIGHT))
                         {
-                            return true; // Remove the bullet
+                            removeBullet = true;
                         }
-
-                        return false; // Keep the bullet
+                        return removeBullet;
                         }), bullets.end());
+
+
 
                 }
             }
@@ -172,8 +171,6 @@ int main(void)
         ResolveCircles(rb.pos, seekerRadius, obstacles);
         bool seekerVisible = IsVisible(rb.pos, targetViewDistance, targetPosition, targetRadius, obstacles);
 
-        //*Insert bullet removal here*
-        // Update bullet positions
         for (Rigidbody& bullet : bullets)
             Update(bullet, dt);
 
@@ -242,7 +239,7 @@ int main(void)
                 if (ImGui::Button("Remove"))
                 {
                     obstacles.erase(obstacles.begin() + i);
-                    i--; // Adjust the index after removal
+                    i--;
                 }
                 ImGui::TreePop();
             }
