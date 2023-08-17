@@ -1,6 +1,6 @@
 #pragma once
 #include "Physics.h"
-#include "Timer.h"
+#include "Nodes.h" 
 #include <array>
 
 class Entity : public Rigidbody
@@ -59,7 +59,7 @@ public:
 	}
 
 	Type GetType() const { return mType; }
-
+	bool isActive = true;
 private:
 	const Type mType;
 };
@@ -78,13 +78,36 @@ public:
 	Player(float maxHealth = 100.0f, float speed = 500.0f, float radius = 25.0f) :
 		Entity(maxHealth, speed, radius) {}
 
-	void Update(float dt, const World& world)
+	// Inside the Player class's Update function
+	void Update(float dt, World& world)
 	{
-		// A4 TODO -- Give the player the ability to shoot bullets
+
+		if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+		{
+			Bullet newBullet(Bullet::PLAYER);
+
+			// Calculate the offset distance (adjust this value as needed)
+			float offsetDistance = mRadius + newBullet.Radius() + 10.0f; // Example offset distance
+
+			// Calculate the offset position based on player's direction and offset distance
+			Vector2 offset = dir * offsetDistance;
+
+			// Set the bullet's position to the player's position plus the offset
+			newBullet.pos = pos + offset;
+
+			// Set a fixed speed for the bullet
+			newBullet.vel = Normalize(GetMousePosition() - newBullet.pos) * 500.0f; // Adjust speed as needed
+
+			world.bullets.push_back(newBullet);
+		}
+
+		// Rest of the player's update logic
 		acc = Seek(GetMousePosition(), pos, vel, mSpeed);
 		::Update(*this, dt);
 		ResolveCircles(pos, mRadius, world.obstacles);
 	}
+
+
 };
 
 // Handle transitions at enemy-level, handle everything else at tree-level
@@ -122,21 +145,27 @@ public:
 
 	// (Unlocked in lab 8)
 	// Player and Enemy must be created before trees can be created, so we need to set them explicity
-	//void SetTrees(Node* offensive, Node* defensive)
-	//{
-	//	mTrees[OFFENSIVE] = offensive;
-	//	mTrees[DEFENSIVE] = defensive;
-	//}
+	void SetTrees(Node* offensive, Node* defensive)
+	{
+		mTrees[OFFENSIVE] = offensive;
+		mTrees[DEFENSIVE] = defensive;
+	}
+
+	void SetTree(Node* tree) { mTree = tree; }
 
 	void Update(float dt)
 	{
 		// 1. State update
 		OnStateUpdate(dt);
 
+		// Test decision tree, make your own offensive and defensive trees for this lab!
+		if (mTree != nullptr)
+			Traverse(mTree);
+
 		// (Unlocked in lab 8)
 		// 2. Evaluate decision tree for current state
-		//if (mState < State::NEUTRAL)
-		//	Traverse(mTrees[mState]);
+		if (mState < State::NEUTRAL)
+			Traverse(mTrees[mState]);
 
 		// 3. Physics update
 		acc = acc + Avoid(*this, dt, mWorld.obstacles, mProbes);
@@ -166,9 +195,10 @@ private:
 	State mState = NEUTRAL;
 
 	std::array<Timer, COUNT> mTimers{};
+	Node* mTree = nullptr;
 
 	// (Unlocked in lab 8)
-	//std::array<Node*, 2> mTrees{};
+	std::array<Node*, 2> mTrees{};
 
 	void OnStateEnter()
 	{
@@ -204,13 +234,11 @@ private:
 
 	void OnStateUpdate(float dt)
 	{
-		// Task 1: Test health-based condition
 		if (HealthPercent() < 0.25f && (mState == OFFENSIVE || mState == NEUTRAL))
 		{
 			Change(DEFENSIVE);
 		}
 
-		// Task 2: Test time-based condition
 		Timer& currentTimer = mTimers[mState];
 		currentTimer.Tick(dt);
 
@@ -222,7 +250,6 @@ private:
 			}
 			else
 			{
-				// Coin toss: Transition to OFFENSIVE or DEFENSIVE based on random choice.
 				if (std::rand() % 2 == 0)
 				{
 					Change(OFFENSIVE);
@@ -234,11 +261,9 @@ private:
 			}
 		}
 
-		// Task 3: Handle patrolling
-		 // Task 3: Handle patrolling
+	
 		if (mState == NEUTRAL)
 		{
-			// Randomly choose patrol direction based on coin toss
 			if (std::rand() % 2 == 0)
 			{
 				mPatrolClockwise = true;
@@ -248,7 +273,6 @@ private:
 				mPatrolClockwise = false;
 			}
 
-			// Calculate the index of the nearest waypoint
 			size_t nearestWaypointIndex = 0;
 			float shortestDistance = Distance(pos, mWorld.waypoints[0]);
 
@@ -262,7 +286,6 @@ private:
 				}
 			}
 
-			// Set the next waypoint index to the index of the nearest waypoint
 			mWaypointIndex = nearestWaypointIndex;
 
 

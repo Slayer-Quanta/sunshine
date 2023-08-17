@@ -6,7 +6,7 @@ struct Rigidbody
     Vector2 pos{};
     Vector2 vel{};
     Vector2 acc{};
-
+    float health = 100.0f;
     Vector2 dir{ 1.0f, 0.0f };  // right
     float angularSpeed = 0.0f;  // radians
 };
